@@ -1,0 +1,16 @@
+/default.md
+/org/pdfs/
+/node_modules/
+/resources/
+/org/biblio/auto/
+/org/org-roam.db
+/org/org-fc.tsv
+/public/
+/org/work/
+org/private/
+/org/lit/.auctex-auto/
+/.ninja_log
+/build.ninja
+/org/daily/
+/.emacs.d
+/content/posts
