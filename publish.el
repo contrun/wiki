@@ -7,7 +7,10 @@
 
 (defconst my/emacs-dir
   ;;; Customized `user-emacs-directory', used for several separate configurations.
-  (expand-file-name ".emacs.d" my/current-dir))
+  (let ((user-dir (getenv "EMACS_USER_DIRECTORY")))
+    (if user-dir
+        user-dir
+      (expand-file-name ".emacs.d" my/current-dir))))
 
 (defconst my/org-dir
   ;;; Org files directory
@@ -41,8 +44,7 @@
   (unless (file-exists-p org-id-locations-file)
     (let ((org-id-files (org-roam--list-files org-roam-directory))
           org-agenda-files)
-      (org-id-update-id-locations)))
-  )
+      (org-id-update-id-locations))))
 
 (use-package ox-hugo
   :straight (ox-hugo :type git :host github :repo "kaushalmodi/ox-hugo"
