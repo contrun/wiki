@@ -74,7 +74,7 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Build
-        run: make all
+        run: make release
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3

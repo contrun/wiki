@@ -1,6 +1,14 @@
 .DEFAULT_GOAL:=all
 
-all: convert build-minial
+# Don't use quotes in .env
+ifneq (,$(wildcard ./.env))
+	include .env
+	export
+endif
+
+all: convert build serve
+
+release: convert build-minial
 
 convert:
 	emacs --batch -l publish.el --eval "(publish-all)"
