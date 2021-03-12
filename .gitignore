@@ -14,3 +14,4 @@ org/private/
 /org/daily/
 /.emacs.d
 /content/posts
+.env

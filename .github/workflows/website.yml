@@ -26,7 +26,7 @@ jobs:
           EOF
           # some configurable environment variables
           tee -a .env.secrets <<< "$DOTENV"
-          grep -hs ^ .env.default .env .env.secrets | tee .env.final
+          grep -hs ^ .env.default .env.local .env .env.secrets | tee .env.final
         env:
           DOTENV: ${{ secrets.DOTENV }}
 

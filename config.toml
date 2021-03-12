@@ -1,4 +1,4 @@
-baseURL = "https://contrun.github.io/km/"
+baseURL = "https://example.org"
 languageCode = "en-us"
 title = "untitiled"
 theme = "cortex"
@@ -6,7 +6,7 @@ canonifyURLs = true
 relativeUrls = true
 
 [params]
-email = "uuuuuu@protonmail.com"
+email = "test@example.org"
 
 [markup]
   [markup.goldmark]
