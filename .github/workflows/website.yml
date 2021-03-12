@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - actions
 
 jobs:
   deploy:
@@ -16,16 +17,26 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: Get environment variables
-        id: env
+      - name: Generate dotenv file
         run: |
-          if [[ -f .env ]]; then . .env; fi
-          echo "::set-output name=HUGO_VERSION::${HUGO_VERSION:-latest}"
-          echo "::set-output name=EMACS_VERSION::${EMACS_VERSION:-27.1}"
+          cat <<EOF | tee -a .env.default
+          HUGO_VERSION=0.81.0
+          EMACS_VERSION=27.1
+          NODE_VERSION=14
+          EOF
+          # some configurable environment variables
+          tee -a .env.secrets <<< "$DOTENV"
+          grep -hs ^ .env.default .env .env.secrets | tee .env.final
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+
+      - uses: c-py/action-dotenv-to-setenv@v2
+        with:
+          env-file: .env.final
 
       - uses: purcell/setup-emacs@v3.0
         with:
-          version: '${{ steps.env.outputs.EMACS_VERSION }}'
+          version: '${{ env.EMACS_VERSION }}'
 
       - name: Cache emacs dependencies
         uses: actions/cache@v2
@@ -35,10 +46,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-emacs-${{ steps.env.outputs.EMACS_VERSION }}-
 
-      - name: Setup Hugo
+      - name: Setup hugo
         uses: peaceiris/actions-hugo@v2
         with:
-          hugo-version: '${{ steps.env.outputs.HUGO_VERSION }}'
+          hugo-version: '${{ env.HUGO_VERSION }}'
           extended: true
 
       - name: Cache hugo modules
@@ -49,8 +60,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-hugomod-
 
-      - name: Setup Node
+      - name: Setup node
         uses: actions/setup-node@v2
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
 
       - name: Cache node dependencies
         uses: actions/cache@v2
