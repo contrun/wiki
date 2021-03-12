@@ -1,0 +1,54 @@
+#+title: identity-aware proxy
+#+roam_tags: proxy "zero trust"
+
+An identity-aware proxy is a reverse proxy which forwards normal payload and attaches the identity information to the backend servers.
+
+Identity-aware proxy is an essential part of Google's beyondcorp.
+
+* Beyondcorp
+
+Three key part of beyondcorp.
+
+- Collecting all collectable information about the device and user.
+- Proxying all traffic through an access proxy, instead of setting up a trusted perimeter.
+- Specifying security policy through a unified configuration center and a powerful dsl ([[https://github.com/google/cel-spec][cel]]).
+
+* How to obtain identity informatin?
+
+This is implmentation specific. For http traffic, there is a more or less generic method to obtain identity infromation, i.e. nginx [[https://docs.nginx.com/nginx/admin-guide/security-controls/configuring-subrequest-authentication/][http_auth_request_module]] and its equivalents.
+For other protocols, there is no such thing?
+
+* How to pass identity information?
+
+- HTTP is simple. We can easily attach any metadata in the HTTP world just by adding additional header. How do we do that securely? Http header is easy to fabricate. Luckily, there is a standard way to do this, json web token (jwt).
+  JWT consists of three parts, metadata, payload and signature. The payload can be any valid json data. The integrity is ensured by the signature, which can be verified with json web keys (jwks).
+
+- Life is harder for other tcp/udp services. We have mutual ssl authentication. All we need is a common trusted certificate authority, and certificates signed by this CA is trusted by all services. We attach the neccessary metadata to the certificats.
+
+- What about L3 solutions? In the brave new Kubernetes world, we have different ip addresses for different pods (using services are more appropirate), i.e. we can identity pods with the ip addresses assigned to them. Some container network interface (cni)
+  (like [[https://cilium.io/][cilium]]) implementor did implement identity-awareness in the ip level. I expect they are implemented with something like [[https://tailscale.com/][tailscale]] to do network traffic, with a full-featured control plane. One thing I am curius is that how do they pass the identity information.
+  Applications normally do interact with stuff that low level.
+
+* Some implementations.
+
+** Teleport
+Let's have a look at the architecture of [[https://goteleport.com/][teleport]], an open source unified access plane which supports a wide range of applications, including kubernetes, postgresql and http applications.
+
+#+DOWNLOADED: https://goteleport.com/teleport/docs/assets/overview-d1ab492628.svg @ 2021-03-12 14:12:33
+[[file:../static/images/2021-03-12_14-12-33_overview-d1ab492628.svg]]
+
+1. Initiate Client Connection
+1. Authenticate Client
+1. Connect to Node
+1. Authorize Client Access to Node
+
+
+A notable difference is that instead of connecting directly to the backend service. Teleport has a pool of nodes which acts on the user's behaviour to connect to backend servers.
+This has a few benefits.
+- This evades the problem of backend services not being directly routable from teleport proxy.
+- Loosing coupling between proxy and backend services. Different kind of backend services have different kind of nodes, which can have different kind of auditting logic.
+
+Also note teleport proxy does not push information directly to node service. Node service actively pull information from teleport auth.
+
+** TODO Pomerium
+** TODO Cilium
