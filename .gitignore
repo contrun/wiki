@@ -15,3 +15,4 @@ org/private/
 /.emacs.d
 /content/posts
 .env
+/static/ox-hugo

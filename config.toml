@@ -4,6 +4,7 @@ title = "untitiled"
 theme = "cortex"
 canonifyURLs = true
 relativeUrls = true
+staticDir = ["static", "org/assets"]
 
 [params]
 email = "test@example.org"

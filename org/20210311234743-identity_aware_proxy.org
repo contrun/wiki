@@ -35,7 +35,7 @@ For other protocols, there is no such thing?
 Let's have a look at the architecture of [[https://goteleport.com/][teleport]], an open source unified access plane which supports a wide range of applications, including kubernetes, postgresql and http applications.
 
 #+DOWNLOADED: https://goteleport.com/teleport/docs/assets/overview-d1ab492628.svg @ 2021-03-12 14:12:33
-[[file:../static/images/2021-03-12_14-12-33_overview-d1ab492628.svg]]
+[[file:assets/images/2021-03-12_14-12-33_overview-d1ab492628.svg]]
 
 1. Initiate Client Connection
 1. Authenticate Client
