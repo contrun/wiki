@@ -25,10 +25,8 @@ jobs:
           NODE_VERSION=14
           EOF
           # some configurable environment variables
-          tee -a .env.secrets <<< "$DOTENV"
-          grep -hs ^ .env.default .env.local .env .env.secrets | tee .env.final
-        env:
-          DOTENV: ${{ secrets.DOTENV }}
+          gpg --batch --yes --passphrase-fd 0 --output .env.decrypted --decrypt .env.gpg <<< "${{ secrets.GPG_PASSWORD }}"
+          grep -hs ^ .env.default .env.local .env .env.decrypted | tee .env.final
 
       - uses: c-py/action-dotenv-to-setenv@v2
         with:
