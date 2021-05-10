@@ -100,7 +100,7 @@ When nix become too unwieldy, I resort to Kubernetes.
 An ideal setup would be using <a href=https://www.terraform.io/>terraform</a> to provision cloud resources, using nix to manage all services including Kubernetes ones.
 This is currently not possible for me because firstly, many resources I used does not have terraform provider. Secondly,
 nix currently does not support ad hoc variable assignment like terraform and ansible. It is possible to pass variables from the command line, but it is not pleasant to use.
-Thirdly, Kubernetes requires a lot of dedication, currently nix can&rsquo;t manage it efficiently.</p><h3 id=nix>Nix</h3><p>Nix is a much more declarative, reliable and reproducible way to build infrastructure. <a href=https://contrun.github.io/talks/the-hitchhiker-s-guide-to-nixos/>Here</a> is a short introduction.
+Thirdly, Kubernetes requires a lot of dedication, currently nix can&rsquo;t manage it efficiently.</p><h3 id=nix>Nix</h3><p>Nix is a much more declarative, reliable and reproducible way to build infrastructure. <a href=https://talks.cont.run/the-hitchhiker-s-guide-to-nixos/>Here</a> is a short introduction.
 In short, building NixOS profiles is like building docker image.
 You build a new container image and run a container with that image as a base. The container image itself is immutable. When you change your code,
 you need to build a new image. When you need some new operating system configuration, you build a new NixOS profile and switch to it.
