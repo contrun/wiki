@@ -134,8 +134,8 @@ A pleasant side effect of using ansible to manage Kubernetes is what I did and w
 There are a few edge cases where I can&rsquo;t simply use nix and docker. <a href=https://jupyterhub.readthedocs.io/en/stable/>Jupyterhub</a> and <a href=https://www.eclipse.org/che/>eclipse che</a> are major ones, as they need to manage cluster resources dynamically.
 They spawn new containers on user request. This is doable with vanilla docker spawner for jupyter hub. I don&rsquo;t think Che support this natively.
 Using Kubernetes is much preferable.</p><h2 id=security>Security</h2><h3 id=authentication-and-authorization>Authentication and Authorization</h3><h4 id=setup>Setup</h4><p>I use <a href=https://github.com/authelia/authelia>authelia</a> for authentication and authorization. I <a href=https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L1619>created</a> an <a href=https://doc.traefik.io/traefik/middlewares/forwardauth/>ForwardAuth</a> middleware for traefik, which works like nginx <a href=http://nginx.org/en/docs/http/ngx%5Fhttp%5Fauth%5Frequest%5Fmodule.html>auth_request</a>.
-Upon receive a client request, depending on the routing, traefik may initiate a subrequest to authelia
-with the necessary client information, if authelia can authenticate the user and authorize the request, the client request will be forwarded
+Upon receiving a client request, depending on the routing, traefik may initiate a subrequest to authelia possibly with necessary client crendentials,
+if authelia is able to authenticate the user and authorize the request, the client request will be forwarded
 to the backend service with some extra headers containing client user information.
 There is not such thing as authorization yet. It&rsquo;s only me using my services.</p><h4 id=weakness>Weakness</h4><p>Authelia is not satisfactory in many aspects. First, its policy engine is not flexible enough. Second, it requires a lot of boilerplate in
 the configuration, e.g. I need to specify many hard-coded base domain <code>hostname.mydomain.tld</code> instead of hostname. This is not desirable as I have many hostnames,
