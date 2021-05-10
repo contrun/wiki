@@ -20,13 +20,22 @@ jobs:
       - name: Generate dotenv file
         run: |
           cat <<EOF | tee -a .env.default
-          HUGO_VERSION=0.81.0
-          EMACS_VERSION=27.1
+          HUGO_VERSION=0.83.0
+          EMACS_VERSION=27.2
           NODE_VERSION=14
           EOF
           # some configurable environment variables
-          gpg --batch --yes --passphrase-fd 0 --output .env.decrypted --decrypt .env.gpg <<< "${{ secrets.GPG_PASSWORD }}"
-          grep -hs ^ .env.default .env.local .env .env.decrypted | tee .env.final
+          tee -a .env.secrets <<< "$DOTENV"
+          if [[ -f .env.gpg ]]; then gpg --batch --yes --passphrase-fd 0 --output .env.decrypted --decrypt .env.gpg <<< "${{ secrets.GPG_PASSWORD }}"; fi
+          grep -hs ^ .env.default .env.local .env .env.decrypted .env.secrets | tee .env.final
+          echo "" >> .env.final
+          owner="${{ github.repository_owner }}"
+          repo="$(awk -F / '{print $2}' <<< "${{ github.repository }}")"
+          if ! grep -qE '^HUGO_BASEURL=' .env.final; then echo "HUGO_BASEURL=${BASEURL:-https://$owner.github.io/$repo/}" | tee -a .env.final; fi
+          if ! grep -qE '^DOMAIN=' .env.final; then echo "DOMAIN=$(awk -F / '/^HUGO_BASEURL=/ {print $3}' .env.final | tail -n1)" | tee -a .env.final; fi
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+          BASEURL: ${{ secrets.BASEURL }}
 
       - uses: c-py/action-dotenv-to-setenv@v2
         with:
@@ -79,3 +88,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
+          cname: '${{ env.DOMAIN }}'
+          publish_branch: gh-pages
