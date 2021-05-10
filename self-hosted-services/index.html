@@ -80,21 +80,16 @@ The certificates are obtained by setting <a href="https://search.nixos.org/optio
 Currently TLS is terminated by traefik using above certificates.</p><h4 id=service-and-routing-registration>Service and Routing Registration</h4><p>Service and router registration is done in a self-organizing way.
 I don&rsquo;t use subpath routing rules, as it may require extra works of rewriting paths.
 Routing is only matched by <code>Host</code>. All my services have dedicated domain.
-Cloudflare provides wildcard DNS resolution. My coredns configuration above also resolves domain names in the wildcard matching fashion.</p><ul><li><p>Docker</p><p>This is managed by traefik with docker provider. All I need to do is add a label to the container. Traefik will automatically pick up the label
-and set up the router. This leverages the <code>defaultRule</code> for <a href=https://doc.traefik.io/traefik/providers/docker/>traefik docker provider</a>.</p><div class=highlight><pre style=background-color:#f0f0f0;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-nix data-lang=nix>providers <span>=</span> {
+Cloudflare provides wildcard DNS resolution. My coredns configuration above also resolves domain names in the wildcard matching fashion.</p><ul><li><p>Fixed Services and Routings</p><p><a href=https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L933-L1102>Generated from nix expressions</a>. It is obligate for me to praise how easily nix (a real programming language, albeit a weak one) eliminates boilerplate.
+Why is everyone trying to use some half-baked configuration format? Can we have a good language for general configurations? Spoiler alert: <a href=https://dhall-lang.org/>dhall-lang</a>.</p></li></ul><ul><li><p>Docker</p><p>This is managed by traefik with docker provider. All I need to do is add a label to the container. Traefik will automatically pick up the label
+and set up the router. This leverages the <code>defaultRule</code> for <a href=https://doc.traefik.io/traefik/providers/docker/>traefik docker provider</a>. The domain is set by container name if the domainprefix label is not found.</p><div class=highlight><pre style=background-color:#f0f0f0;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-nix data-lang=nix>providers <span>=</span> {
   docker <span style=color:#666>=</span> {
     defaultRule <span style=color:#666>=</span> getRule
       <span style=color:#4070a0>&#39;&#39;{{ (or (index .Labels &#34;domainprefix&#34;) .Name) | normalize }}&#39;&#39;</span>;
-    endpoint <span style=color:#666>=</span> <span style=color:#007020;font-weight:700>if</span> (prefs<span style=color:#666>.</span>ociContainerBackend <span style=color:#666>==</span> <span style=color:#4070a0>&#34;docker&#34;</span>) <span style=color:#007020;font-weight:700>then</span>
-      <span style=color:#4070a0>&#34;unix:///var/run/docker.sock&#34;</span>
-    <span style=color:#007020;font-weight:700>else</span>
-      <span style=color:#4070a0>&#34;unix:///var/run/podman/podman.sock&#34;</span>;
-    network <span style=color:#666>=</span> <span style=color:#4070a0>&#34;</span><span style=color:#70a0d0;font-style:italic>${</span>prefs<span style=color:#666>.</span>ociContainerNetwork<span style=color:#70a0d0;font-style:italic>}</span><span style=color:#4070a0>&#34;</span>;
   };
 }
 </code></pre></div></li></ul><ul><li><p>Kubernetes</p><p>Just <a href=https://kubernetes.io/docs/concepts/services-networking/ingress/>the usual Kubernetes ingress</a>. I passed k3s kubeconfig to traefik by systemd environment variable <a href=https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L1897-L1903>here</a>.
-Traefik will magically pick up Kubernetes ingress rules.</p></li></ul><ul><li><p>Fixed Services and Routings</p><p><a href=https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L933-L1102>Generated from nix expressions</a>. It is obligate for me to praise how easily nix (a real programming language, albeit a weak one) eliminates boilerplate.
-Why is everyone trying to use some half-baked configuration format? Can we have a good language for general configurations? Spoiler alert: <a href=https://dhall-lang.org/>dhall-lang</a>.</p></li></ul><h2 id=deployment>Deployment</h2><p>I currently use nix to manage all my personal devices, <a href=https://www.ansible.com/>ansible</a> to manage all the cloud resources. Most services are managed by nix.
+Traefik will magically pick up Kubernetes ingress rules.</p></li></ul><h2 id=deployment>Deployment</h2><p>I currently use nix to manage all my personal devices, <a href=https://www.ansible.com/>ansible</a> to manage all the cloud resources. Most services are managed by nix.
 When nix become too unwieldy, I resort to Kubernetes.
 An ideal setup would be using <a href=https://www.terraform.io/>terraform</a> to provision cloud resources, using nix to manage all services including Kubernetes ones.
 This is currently not possible for me because firstly, many resources I used does not have terraform provider. Secondly,
