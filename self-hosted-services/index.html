@@ -21,7 +21,6 @@ This is much more manageable, the downside is that the original client&rsquo;s i
 To ease this problem, haproxy designed a protocol called <a href=https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt>PROXY</a> (I can haz a more searchable name?).
 In short, it appends original request&rsquo;s source and destination addresses to the TCP connection or UDP stream.
 As stated in the above document, this will solve the multiple return paths because we are initiating another TCP connection/UDP stream.
-I use envoy as edge proxy <a href=https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/templates/envoy.yaml.j2>https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/templates/envoy.yaml.j2</a>.
 Unfortunately, this solution is invasive as it requires the backend service to support PROXY protocol explicitly.
 Fortunately we have <a href=https://github.com/cloudflare/mmproxy>mmproxy</a>. It accepts PROXY protocol packets, unwraps it and then forwards it to upstream. Moreover. Moreover, it does so transparently.
 The original mmproxy does not support UDP, while this go implementation <a href=https://github.com/path-network/go-mmproxy>go-mmproxy</a> supports.</p></li></ul><ul><li><p>aioproxy</p><p>mmproxy is great when work with envoy. But it can not multiplex port like sslh, does not support non-transparent proxy,
@@ -40,7 +39,7 @@ There are a few things I intended to add. First, more protocol support for multi
 Second, as discussed above, it could go wrong when client and transparent proxy is on the same host. We need intelligent transparent forwarding, i.e.
 when client and transparent proxy is on the same host, do not use the same client address tuple.
 At this point, the proxy is now been abandoned in favor of <a href=https://github.com/mholt/caddy-l4>caddy-l4</a>. Caddy-l4 is not mature enough currently, but it has much greater potential,
-as we can use anything caddy already provided.</p></li></ul></li></ul><ul><li><p>envoy+traefik+aioproxy</p><p>This is my current setup. Envoy, traefik and aioproxy are a great match. Client connection to my edge proxy is wrapped with PROXY protocol by envoy
+as we can use anything caddy already provided.</p></li></ul></li></ul><ul><li><p>envoy+traefik+aioproxy</p><p>This is my current setup. Envoy, traefik and aioproxy are a great match. Client connection to my edge proxy <a href=https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/templates/envoy.yaml.j2>is wrapped with PROXY protocol</a> by envoy
 and forwarded to traefik. Depending on the packet format, traefik would forward it to HTTP traffic to docker or Kubernetes, other TCP traffic to aioproxy
 (this works by setting SNI to rules to match <code>Host("*")</code>, see <a href=https://community.traefik.io/t/routing-ssh-traffic-with-traefik-v2/717>here</a>), the PROXY protocol header is automatically peeled off when possible.
 It is not transparent to aioproxy. I don&rsquo;t intend to optimize it for now. In fact, it would be better if I insert aioproxy
