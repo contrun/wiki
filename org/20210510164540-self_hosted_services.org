@@ -7,7 +7,7 @@ I mainly provision and manage services with [[https://nixos.org/][nix]], [[https
 To multiplexing protocols with a single port, I use [[https://github.com/contrun/aioproxy/][aioproxy]]. I use [[https://restic.net/][restic]] to back up my inevitably accumulated state.
 
 * Principles
-My principles can be best described as [[https://github.com/cncf/toc/blob/main/DEFINITION.md][cloud nativeness]]. Cloud-native is a all-encompassing and vague term.
+My principles can be best described as [[https://github.com/cncf/toc/blob/main/DEFINITION.md][cloud nativeness]]. Cloud-native is an all-encompassing and vague term.
 I have a few concrete points on my mind.
 + Software-defined everything
 + Declarative
@@ -20,23 +20,23 @@ I have a few concrete points on my mind.
 The first obstacle to self-host everything is that you don't have a stable public accessible IP. There are a few solutions.
 ** The cloud
 + I am paranoid enough to not trust the cloud, aka other people's computer.
-+ This approach is not cost-efficient. Even my Raspberry PI can beat many VPSes in terms of CPU frequency. Not to mention I can easily insert a 256G SD card.
++ This approach is not cost-efficient. Even my Raspberry PI can beat many VPSes in terms of computing power. Not to mention I can easily insert a 256G SD card.
 + Locality. There is no place like LAN. I see no benefit in downloading youtube video to another VPS.
 
 ** DDNS
-This is simplest. I don't use this mainly because it is not reliable in my setup. To name a few problems of DDNS.
-+ 80, 443, 8080 blocked.
-+ Not portable router configurations. You need to set up port mapping or dmz host in your router, which is hard to codify, if not impossible
+This is simplest. I don't use this mainly because it is not reliable in my setup. To name a few problems of DDNS,
++ 80, 443, 8080 blocked
++ Not portable router configurations. You need to set up port mapping or DMZ host in your router, which is hard to codify, if not impossible
 + [[https://en.wikipedia.org/wiki/Carrier-grade_NAT][CGNAT]]
 + ipv6 is still yet to come
 
 ** Port Forwarding
-There are many port forwarding software. To name a few, [[https://www.harding.motd.ca/autossh/][autossh]] (my favorite), [[https://ngrok.com/][ngrok]], [[https://github.com/fatedier/frp][frp]], [[https://github.com/ehang-io/nps][nps]].
-You may also combine ddns with port forwarding of your router. [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L2189-L2234][Here]] was my attempt to do this.
-The biggest problem of port forwarding is that it is not scalable and there is no generic inter-node connectivity with port forwarding.
+There are many port-forwarding software. To name a few, [[https://www.harding.motd.ca/autossh/][autossh]] (my favorite), [[https://ngrok.com/][ngrok]], [[https://github.com/fatedier/frp][frp]], [[https://github.com/ehang-io/nps][nps]].
+You may also combine DDNS with port forwarding of your router. [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L2189-L2234][Here]] was my attempt to do this.
+The biggest problem of port forwarding is that it is not scalable and there is no generic inter-node connectivity.
 Port forwarding has the following weaknesses.
 + star topology, single point of failure
-+ no inter-node connectivity.
++ no inter-node connectivity
 + number of ports are limited, you only have one 443
 + hard to set up (authorization)
 + no [[https://en.wikipedia.org/wiki/Hairpinning][hairpinning]] support
@@ -45,7 +45,7 @@ Port forwarding has the following weaknesses.
 ** Overlay Networks
 [[https://en.wikipedia.org/wiki/Overlay_network][Overlay networks]] are magic. What I meant is not [[https://github.com/containernetworking/cni][container network interface]] kind of overlay network, but solutions like [[https://www.zerotier.com/][zerotier]], [[https://tailscale.com/][tailscale]], [[https://github.com/tonarino/innernet][innernet]], [[https://github.com/slackhq/nebula][nebula]], [[https://github.com/ntop/n2n][n2n]].
 There all have interesting aspects. But none of they are self-organizing. They all require a centralized coordination server.
-What I have on my mind is something like [[https://matrix.org/blog/2021/05/06/introducing-the-pinecone-overlay-network/][matrix pinecone]]. I have been thinking on implementing a pinecone like overlay network for a while, self-organizing, and tunneling traffic with [[https://libp2p.io/][libp2p]].
+What I have on my mind is something like [[https://matrix.org/blog/2021/05/06/introducing-the-pinecone-overlay-network/][matrix pinecone]]. I have been thinking on implementing a pinecone-like overlay network for a while, self-organizing, and tunneling traffic with [[https://libp2p.io/][libp2p]].
 I currently rely on tailscale and zerotier to establish peer-to-peer connectivity. This works great in the following perspectives.
 + inter-node connectivity
 + all ports are belong to you
@@ -60,17 +60,17 @@ L3 routing is provided by the overlay network solutions.
 *** Considerations
 For L4 routing, I care about transparency, protocol multiplexing and configuration-complexity.
 **** Transparency
-This means that the backend service does not know there is a middle man do the heavy lifting.
+This means that the backend service does not need to know there is a middle man do the heavy lifting.
 In particular, it means that the origin requester's address is preserved. Typical HTTP reverse proxies are not transparent.
 They pass the original requester's information by injecting an ~X-Forwarded-For~ header.
 **** Protocol Multiplexing
-L4 multiplexing means that we can use the same TCP port for HTTP, TlS and SSH. An example is [[https://github.com/yrutschle/sslh][sslh]].
+L4 protocol multiplexing means that we can use the same TCP port for HTTP, TlS and SSH. An example is [[https://github.com/yrutschle/sslh][sslh]].
 It normally works by peeking into a few first bytes and determine which
-protocol this packet is, and then handing off the connection to another application which is Listening on some specific port.
+protocol this packet is, and then handing off the connection to another application which is listening on some other port.
 **** Configuration Complexity
 Do we have to configure both the proxy and backend services? What if we change a user-fronting proxy address?
-Do the backend server need to adjust for this change? Any special configuration for different user-fronting configurations?
-What if an upstream server is down? Must I manually remove edit the configuration to reflect this change?
+Do the backend server need to adjust for this change? Any special configuration for different user-fronting proxies?
+What if an upstream server is down? Must I manually edit the configuration to reflect this change?
 *** Solutions
 **** iptables
 This is just like NAT. It is transparent. I believe you can multiplex port with some [[https://ipset.netfilter.org/iptables-extensions.man.html][iptables extensions]]. It is not super pretty.
@@ -81,20 +81,19 @@ we need policy based routing.
 **** ipvs
 Compared with iptables, ipvs is much more manageable and scalable. Yet it still is too complicated.
 **** usespace L4 proxy
-envoy/haproxy/nginx etc can be used as L4 proxy. They accept the incoming downstream connection and establish a new upstream connection like a pipe.
+envoy/haproxy/nginx etc. can be used as L4 proxy. They accept incoming downstream connection and establish a new upstream connection, just like a pipe.
 This is much more manageable, the downside is that the original client's information is lost in translation.
 To ease this problem, haproxy designed a protocol called [[https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt][PROXY]] (I can haz a more searchable name?).
 In short, it appends original request's source and destination addresses to the TCP connection or UDP stream.
 As stated in the above document, this will solve the multiple return paths because we are initiating another TCP connection/UDP stream.
 Unfortunately, this solution is invasive as it requires the backend service to support PROXY protocol explicitly.
-Fortunately we have [[https://github.com/cloudflare/mmproxy][mmproxy]]. It accepts PROXY protocol packets, unwraps it and then forwards it to upstream. Moreover. Moreover, it does so transparently.
+Fortunately we have [[https://github.com/cloudflare/mmproxy][mmproxy]]. It accepts PROXY protocol packets, unwraps them and then forwards them to upstream. Moreover, it does so transparently.
 The original mmproxy does not support UDP, while this go implementation [[https://github.com/path-network/go-mmproxy][go-mmproxy]] supports.
 **** aioproxy
-mmproxy is great when work with envoy. But it can not multiplex port like sslh, does not support non-transparent proxy,
-and does not support non-PROXY protocol traffic.
-Non-transparent proxy is useful when we are trying to proxy a connection whose original requester, proxy and the backend server are all the same host.
+mmproxy is great when working with envoy. But it does not multiplex port like sslh, is not transparent, and does not work with non-PROXY protocol traffic.
+Non-transparent proxy is useful when we are trying to proxy a connection whose original requester, proxy and the backend server are all the same host (see below).
 ***** How transparent proxy works
-Let cip be the client ip, pip be the proxy ip and sip be the backend server IP.
+Let ~cip~ be the client ip, ~pip~ be the proxy ip and ~sip~ be the backend server IP.
 + Client connection: cip:45678 -> sip:22,
   client tries to connect to sip:22, but it actually connects to transparent proxy
 + Transparent proxy downstream connection: cip:45678 -> pip:44443,
@@ -113,13 +112,13 @@ On the other hand, if we use the scheme client <-> envoy <-> mmproxy <-> sslh <-
 transparently, the same bind error would occur (I have not tried it, I expect it to fail).
 
 So it is sometimes useful to proxy non-transparently, and it would be great if we can have an all-in-one proxy which can intelligently unwrap PROXY protocol
-traffic (when it fails to do so, just treats it as normal traffic as forwards it), supports transparent proxy to upstream and multiplexes port for different protocols.
+traffic (when it fails to do so, just treats it as normal traffic and forwards it), supports transparent proxy to upstream and multiplexes port for different protocols.
 
-[[https://github.com/contrun/aioproxy][Here]] is my take on this problem. Aioproxy has basic rudimentary solutions for all above problems.
+[[https://github.com/contrun/aioproxy][Here]] is my take on this problem. Aioproxy has rudimentary solutions for all above problems.
 There are a few things I intended to add. First, more protocol support for multiplexing. Most outstandingly, peeking into SNI, and forwarding connection accordingly.
 Second, as discussed above, it could go wrong when client and transparent proxy is on the same host. We need intelligent transparent forwarding, i.e.
 when client and transparent proxy is on the same host, do not use the same client address tuple.
-At this point, the proxy is now been abandoned in favor of [[https://github.com/mholt/caddy-l4][caddy-l4]]. Caddy-l4 is not mature enough currently, but it has much greater potential,
+At this point, the aioproxy is abandoned in favor of [[https://github.com/mholt/caddy-l4][caddy-l4]]. Caddy-l4 is not mature enough currently, but it has much greater potential,
 as we can use anything caddy already provided.
 **** envoy+traefik+aioproxy
 This is my current setup. Envoy, traefik and aioproxy are a great match. Client connection to my edge proxy [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/templates/envoy.yaml.j2][is wrapped with PROXY protocol]] by envoy
@@ -127,26 +126,26 @@ and forwarded to traefik. Depending on the packet format, traefik would forward 
 (this works by setting SNI to rules to match ~Host("*")~, see [[https://community.traefik.io/t/routing-ssh-traffic-with-traefik-v2/717][here]]), the PROXY protocol header is automatically peeled off when possible.
 It is not transparent to aioproxy. I don't intend to optimize it for now. In fact, it would be better if I insert aioproxy
 in front of traefik, as this way every service is now ignorant of the proxy. But I didn't implement intelligent transparent proxy mentioned
-above yet (this is fairly easy, and I am fairly lazy currently).
+above yet (this is fairly easy, and I am fairly lazy).
 There will be some problem when client and transparent proxy are on the same host, which is a frequent user case for me.
 
 ** Intermission: Split Horizon DNS
 I have a few ways to access my services. When I use my own devices, I can just access my services by overlay networks.
 My devices are part of the overlay network. I can access services via a stable address within ~10.144.0.0/16~.
-Overlay networks are magic. They automatically select path for me, e.g. when my two devices are in the same network, they connect each other
-using LAN address. Overlay networks can transparently do NAT-PMP/UPNP, punch holes. When one device is behind an impenetrable NAT, they automatically select a relay.
-I may want to make part of my services available outside the overlay network. In that case,
-access to the services is proxied by two public accessible VPS. They forward traffic as described above.
-The problem is that my VPS lives in Far Far Away. I don't want to travel around the world when I am in the overlay network.
-Can my device be intelligent enough to just try overlay network first, when it fails to do so, use the backup VPSes?
+Overlay networks are magic. They automatically select paths for me, e.g. when my two devices are in the same network, they connect each other
+using LAN address, otherwise, they connect each other over WAN. Overlay networks can transparently do NAT-PMP/UPNP, punch holes. When one device is behind an impenetrable NAT,
+they automatically select a relay. I may want to make part of my services available outside the overlay network. In that case,
+access to the services is proxied by two public accessible VPSes. They forward traffic as described above.
+The problem is that my VPSes live in Far Far Away. I don't want to travel around the world when I am in the overlay network.
+Can my device be intelligent enough to just try the overlay network first, when it fails to do so, use the backup VPSes?
 This is a well-known problem of [[https://en.wikipedia.org/wiki/Split-horizon_DNS][split horizon dns]]. I have a stable domain name ~service-a.example.com~, I want it to be resolved as ~10.2.3.4~ when I am
 in the corporate network (or I was using a VPN), otherwise please resolve it to ~1.2.3.4~. Here is a few solutions.
 By the way, [[https://tailscale.com/blog/sisyphean-dns-client-linux/][this]] is a great read on this problem.
 
 *** Hosts
-The easiest and the most abominable solution. The downside is
-+ No wildcard support for [[https://superuser.com/questions/135595/using-wildcards-in-names-in-windows-hosts-file][Windows]], [[https://stackoverflow.com/questions/20446930/how-to-put-wildcard-entry-into-etc-hosts][Linux]]
-+ flexibility. You can not graceful fallback to another host, easily add another entry
+The easiest and the most abominable solution. The downsides are
++ no wildcard support for [[https://superuser.com/questions/135595/using-wildcards-in-names-in-windows-hosts-file][Windows]], [[https://stackoverflow.com/questions/20446930/how-to-put-wildcard-entry-into-etc-hosts][Linux]]
++ no flexibility. You can not graceful fallback to another host or easily add another entry
 *** Nsswitch
 If you ever use mdns, you may wonder how ~abc.local~ resolve to the host ~abc~. The secret sauce lies in
 the following stanza of ~/etc/nsswitch.conf~.
@@ -156,11 +155,11 @@ hosts:     files mdns_minimal [NOTFOUND=return] mymachines resolve [!UNAVAIL=ret
 Here, ~mdns_minimal~ and ~mymachine~ are dynamic libraries used by [[https://wiki.archlinux.org/title/Domain_name_resolution#Name_Service_Switch][NSS]] to resolve hosts.
 They provide the functionality of resolving mdns hosts and machinectl hosts. Theoretically, I can just
 write another plugin for nsswitch like ~mdns_minimal~, but nsswitch is also an abomination.
-It is glibc only, thus first musl-linked and statically linked binaries would fail.
+It is glibc only, thus musl-linked and statically linked binaries would fail.
 As a matter of fact, [[https://wiki.musl-libc.org/future-ideas.html][supporting mdns on musl is a future idea]], while [[https://github.com/golang/go/issues/10485][golang fallbacks to glibc to resolve hostname]] when
 the hosts entry in nsswitch is too conflicted. So it does not worth the effort to fiddle with nsswitch.
 *** Coredns
-I find salvation in coredns. Here is how I resolve a domain name with coredns enriched by [[https://github.com/openshift/coredns-mdns][coredns-mdns]] and [[https://github.com/coredns/alternate][coredns-alternate]].
+I found salvation in coredns. Here is how I resolve a domain name with coredns enriched by [[https://github.com/openshift/coredns-mdns][coredns-mdns]] and [[https://github.com/coredns/alternate][coredns-alternate]].
 The source code to this coredns instance is [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/coredns/main.go][here]].
 #+begin_src
 .:5355 {
@@ -178,13 +177,13 @@ The source code to this coredns instance is [[https://github.com/contrun/infra/b
     alternate original NXDOMAIN,SERVFAIL,REFUSED . 1.0.0.1 8.8.4.4 9.9.9.9 180.76.76.76 223.5.5.5
 }
 #+end_src
-The corefile above does the following things.
+The Corefile above does the following things.
 + cname ~*.hostname.mydomain.tld~ to ~hostname.mydomain.tld~
 + Let ~hostname.mydomain.tld~ be resolved to ~hostname.local~ by coredns-mdns
 + Anything not matched or not resolved here is forwarded to real world DNS servers
 To resolve ~hostname.local~, I use [[https://www.avahi.org/][avahi]] to [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L824-L863][announce the workstation]] ~hostname~. This solution is particular elegant,
 in the sense that all hosts need only to configure themselves. To use this DNS server for all applications,
-I added the systemd-resolved configuration [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L773-L780][here]]. It is also possible to make other devices in the overlay network
+I configured systemd-resolved [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L773-L780][here]]. It is also possible to make other devices in the overlay network
 to use this DNS server. I haven't done it yet.
 
 ** L7
@@ -193,18 +192,18 @@ Now that we can resolve domains to desirable hosts, we can access services direc
 I use acme with dns-chanlledge. My DNS service provider is cloudflare. From [[https://letsencrypt.org/][letsencrypt]], I got free wildcard certificates for
 ~*.hostname.mydomain.tld~, ~*.local.mydomain.tld~, optionally also some alias domains like ~*.hub.mydomain.tld~.
 The certificates are obtained by setting [[https://search.nixos.org/options?channel=20.09&from=0&size=50&sort=relevance&query=security.acme][NixOS options security.acme]], and are shared between multiple applications.
-Currently TLS is terminated by traefik using above certificates.
+Currently, TLS is terminated by traefik using above certificates.
 *** Service and Routing Registration
 Service and router registration is done in a self-organizing way.
-I don't use subpath routing rules, as it may require extra works of rewriting paths.
-Routing is only matched by ~Host~. All my services have dedicated domain.
-Cloudflare provides wildcard DNS resolution. My coredns configuration above also resolves domain names in the wildcard matching fashion.
+I don't use subpath routing rules, as it may require extra work of rewriting paths.
+Routing is only matched by ~Host~. All my services have dedicated domains.
+Cloudflare provides wildcard DNS resolution. My coredns configuration above also resolves domain names in a wildcard-matching fashion.
 **** Fixed Services and Routings
-[[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L933-L1102][Generated from nix expressions]]. It is obligate for me to praise how easily nix (a real programming language, albeit a weak one) eliminates boilerplate.
+[[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L933-L1102][Generated from nix expressions]]. It is a obligation for me to praise how easily nix (a real programming language, albeit a weak one) eliminates boilerplate.
 Why is everyone trying to use some half-baked configuration format? Can we have a good language for general configurations? Spoiler alert: [[https://dhall-lang.org/][dhall-lang]].
 **** Docker
 This is managed by traefik with [[https://doc.traefik.io/traefik/providers/docker/][docker provider]]. All I need to do is add a label to the container. Traefik will automatically pick up the label
-and set up the router according to the ~defaultRule~. My rule is to use domainprefix label when applicable, else fall back to container name.
+and set up a routing rule according to the ~defaultRule~. My rule is to use ~domainprefix~ label when applicable, otherwise fall back to container name.
 #+begin_src nix
         providers = {
           docker = {
@@ -223,12 +222,12 @@ When nix becomes too unwieldy, I resort to Kubernetes.
 An ideal setup would be using [[https://www.terraform.io/][terraform]] to provision cloud resources, using nix to manage all services including Kubernetes ones.
 This is currently not possible for me because firstly, many resources I used does not have terraform provider. Secondly,
 nix currently does not support ad hoc variable assignment like terraform and ansible. It is possible to pass variables from the command line, but it is not pleasant to use.
-Thirdly, Kubernetes requires a lot of dedication. Currently nix can't manage Kubernetes efficiently.
+Thirdly, Kubernetes requires a lot of dedication. Currently nix, can't manage Kubernetes efficiently.
 
 ** Nix
 Nix is a much more declarative, reliable and reproducible way to build infrastructure. [[https://talks.cont.run/the-hitchhiker-s-guide-to-nixos/][Here]] is a short introduction.
 In short, building NixOS profiles is like building docker image.
-You build a new container image and run a container with that image as a base. The container image itself is immutable. When you change your code,
+You build a new container image and run a container with that image as base. The container image itself is immutable. When you change your code,
 you need to build a new image. When you need some new operating system configuration, you build a new NixOS profile and switch to it.
 The best thing about NixOS is that nearly every aspect of the OS is tunable by NixOS options. The knobs are formed by the purely functional, lazy language nix.
 
@@ -250,9 +249,9 @@ mkContainer "wallabag" prefs.ociContainers.enableWallabag {
   environmentFiles = [ "/run/secrets/wallabag-env" ];
 }
 #+end_src
-~mkContainer~ is a function to make a new container on. If ~prefs.ociContainers.enableWallabag~ is true, nix would make a container named
-~wallabag~ which depends on the ~postgresql~ container, has the such such volumes and such such environment variables. The environmentFiles is also
-read to set up environment variables. The file ~/run/secrets/wallabag-env~ is managed by [[https://github.com/Mic92/sops-nix][sops-nix]] and source controlled. I also specified
+~mkContainer~ is a function to make a new container. If ~prefs.ociContainers.enableWallabag~ is true, nix would make a container named
+~wallabag~ which depends on the ~postgresql~ container and has such such volumes and such such environment variables. The environmentFiles is also
+read to set up environment variables. The file ~/run/secrets/wallabag-env~ is managed by [[https://github.com/Mic92/sops-nix][sops-nix]] and is version-controlled. I also specified
 the middleware ~authelia~ for traefik, which means that not everyone is allowed to access this service.
 *** Service Discovery
 This is easy. Docker container within the same bridge network can access each other by the container name.
@@ -262,7 +261,7 @@ To mount secrets like Kubernetes, I use docker volume. The secrets are managed b
 according to my ~sops.yaml~ file.
 *** Init Containers and Jobs
 [[https://kubernetes.io/docs/concepts/workloads/pods/init-containers/][Kubernetes init containers]] are sometimes used to manage pods/services dependencies. For this specific use case, init containers are ugly hacks.
-Using systemd to manage container dependency is much more elegant. I need only specify ~dependsOn~ in my nix file, e.g. ~dependsOn = ["postgresql"];~ above.
+Using systemd to manage container dependency is much more elegant. I only need to specify ~dependsOn~ in my nix file, e.g. ~dependsOn = ["postgresql"];~ above.
 I override the ~ExecStartPost~ option for systemd units to do initialization job. Kubernetes jobs are just more containers,
 while cronjobs are just containers with systemd timer.
 *** Ingress
@@ -272,12 +271,12 @@ See routing.
 As much as I love NixOS, I don't use nix for everything. Nix does not work along with some technologies.
 I use ansible for two purposes, first setting up cloud resources (like setting up [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/site.yaml#L19-L41][tailscale]] and [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/site.yaml#L43-L84][envoy]]), second managing Kubernetes.
 Kubernetes is declarative, but using command line to manage Kubernetes is imperative. I use [[https://docs.ansible.com/ansible/latest/collections/community/kubernetes/][community.kubernetes]].
-A pleasant side effect of using ansible to manage Kubernetes is what I did and what I need to do is well-documented.
+A pleasant side effect of using ansible to manage Kubernetes is what I did and what I need to do are well-documented.
 
 ** Kubernetes
 My Kubernetes distribution is k3s (provisioned by nix). Each Kubernetes cluster includes exactly one node for the time being.
-There are a few edge cases where I can't simply use nix and docker. [[https://jupyterhub.readthedocs.io/en/stable/][Jupyterhub]] and [[https://www.eclipse.org/che/][eclipse che]] are major ones, as they need to manage cluster resources dynamically.
-They spawn new containers on user request. This is doable with vanilla docker spawner for jupyter hub. I don't think Che support this natively.
+There are a few edge cases where I can't simply use nix and docker. [[https://jupyterhub.readthedocs.io/en/stable/][Jupyterhub]] and [[https://www.eclipse.org/che/][eclipse che]] are major ones, as they need to provision cluster resources dynamically,
+e.g. they need to spawn new containers on user request. This is doable with vanilla docker spawner for jupyter hub. I don't think Che support this natively.
 Using Kubernetes is much preferable.
 
 * Security
@@ -290,8 +289,8 @@ to the backend service with some extra headers containing client user informatio
 There is not such thing as authorization yet. It's only me using my services.
 *** Weakness
 Authelia is not satisfactory in many aspects. First, its policy engine is not flexible enough. Second, it requires a lot of boilerplate in
-the configuration, e.g. I need to specify many hard-coded base domain ~hostname.mydomain.tld~ instead of hostname. This is not desirable as I have many hostnames,
-and currently this configuration is shared by a common sops file.
+the configuration, e.g. I need to specify many hard-coded base domain ~hostname-a.mydomain.tld~ instead of ~hostname-a~. This is not desirable as I have many different postfixes,
+and the configuration is shared.
 *** Strength
 What I really like about authelia is its simplicity and easy integration with traefik.
 *** Future
@@ -307,8 +306,8 @@ Because of my distrust to other people's computer, I intentionally made my edge 
 There ain't such thing as intrusion detection system yet. Setting up fail2ban is easy, but I need to integrate it with traefik and aioproxy.
 
 * Backup
-Of all the incremental backup tools, there are two distinctive feature about [[https://restic.net/][restic]].
-First, it supports all [[https://rclone.org/][rclone]] backends, second, I can backup different directories from different hosts to the same endpoint.
+Of all the incremental backup tools, there are two distinctive features about [[https://restic.net/][restic]].
+First, it supports all [[https://rclone.org/][rclone]] backends, second, I can back up different directories from different hosts to the same endpoint.
 Here is my nix configuration.
 #+begin_src nix
     restic = {
@@ -336,11 +335,12 @@ Here is my nix configuration.
       };
     };
 #+end_src
-I back up my data everyday to two backend storage.
+I back up my data every day to two backend storage.
 
 * Proxy
+It is a mandate to use a proxy on my machines, as too many websites are blocked in China. I can't tolerate my wallabag instance is unable to access articles on Wikipedia.
 I use [[https://github.com/Dreamacro/clash][clash]] and iptables for transparent proxy. [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/dot_bin/executable_clash-redir][Here]] is the script, and [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L2013-L2107][here]] is the systemd unit to run the script and update clash configuration.
-The source of truth for my clash configuration lies in cloudflare workers kv. All my machines use the same proxy configuration by periodically downloading a subscription from cloudflare worker.
+The source of truth for my clash configuration lies in [[https://www.cloudflare.com/products/workers-kv/][cloudflare workers kv]]. All my machines use the same proxy configuration by periodically downloading a subscription from cloudflare worker.
 Although it is straightforward to set up transparent proxy on Linux, There are two complications when I want to proxy docker container traffic transparently.
 
 ** Transparent proxy does not work with docker container in bridge network mode
@@ -378,13 +378,13 @@ Oh, dear god, iptables is hard. I wish there is an easier way to transparent pro
 ** Kubernetes after All?
 I abandoned my plan of using Kubernetes for all. Currently, I refrain my usage of Kubernetes because first I didn't find a satisfactory workflow
 for nix and Kubernetes, second I begin to feel Kubernetes is the new c++.
-I sincerely hope I can declaratively manange Kubernetes with nix the way I manage docker and traefik with nix.
+I sincerely hope I can declaratively manage Kubernetes with nix the way I manage docker and traefik with nix.
 I find [[https://github.com/xtruder/kubenix/issues/26][integrating kustomize and kubenix]] interesting, but it is not there yet.
 Both nix and Kubernetes are too overwhelming. They require you to go all-in. Nix is my daily driver. It is definitely here to stay.
-I need some Kubernetes features like node affinity (jupyter hub requires a faster node), proxy traffic received from any node.
+I need some Kubernetes features like node affinity (jupyter hub requires a faster node) and proxying traffic received from any node.
 As I said, Kubernetes is like c++. It is extremely powerful, but it is also extremely complex and can be easily misused.
 I partially agree [[https://pythonspeed.com/articles/dont-need-kubernetes/][“Let’s use Kubernetes!” Now you have 8 problems]]. I find also find [[https://github.com/oam-dev/kubevela][kubevela]] to be interesting. I haven't tried it yet.
-I hope it live up to what its promise. Also, [[https://mrkaran.dev/posts/home-server-nomad/][Nomad]] looks interesting, it may well suits che and jupyter hub.
+I hope it lives up to its promise. Also, [[https://mrkaran.dev/posts/home-server-nomad/][Nomad]] looks interesting, it may well suit che and jupyter hub, but they do not support nomad.
 
 ** Configuration Database
 Nix is great. But it is hard for outside world to learn my nix configuration.
