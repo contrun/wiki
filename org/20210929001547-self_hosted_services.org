@@ -1,0 +1,2 @@
+#+title: self-hosted services
+TODO. For now, See [[file:20210510164540-self_hosted_infrastructure.org][self-hosted infrastructure]].

@@ -1,10 +1,13 @@
-#+title: self-hosted services
+#+title: self-hosted infrastructure
 #+roam_tags: "incremental backup" docker nix ansible kubernetes "split horizon dns" "transparent proxy" "software-defined networking" "infrastructure as code" "cloud native" "load balancers" "overlay networks" "mesh networking"
 
 TLDR: I use [[https://tailscale.com/][tailscale]]/[[https://www.zerotier.com/][zerotier]] to establish a smallish mesh network. I use [[https://www.envoyproxy.io/][envoy]] as an edge router to forward L4 traffic.
 I mainly provision and manage services with [[https://nixos.org/][nix]], [[https://www.docker.com/][docker]] and [[https://github.com/mozilla/sops][sops]]. When it is absolutely required, I use [[https://k3s.io/][k3s]] to deploy [[https://kubernetes.io/][Kubernetes]] services.
 [[https://traefik.io/][Traefik]] is used for routing, and [[https://github.com/authelia/authelia][authelia]] is used for blocking unauthorized access.
-To multiplexing protocols with a single port, I use [[https://github.com/contrun/aioproxy/][aioproxy]]. I use [[https://restic.net/][restic]] to back up my inevitably accumulated state.
+To multiplexing protocols with a single port, I use [[https://github.com/contrun/aioproxy/][aioproxy]]. I use [[https://restic.net/][restic]] to back up my inevitably accumulated state. For CI/CD,
+I use [[https://github.com/features/actions][github actions]], [[https://www.vaultproject.io/][hashicorp vault]], [[https://github.com/serokell/deploy-rs][depoly-rs]] and [[https://www.cachix.org/][cachix]]. I use the grafana stack ([[https://prometheus.io/][prometheus]], [[https://prometheus.io/docs/alerting/latest/alertmanager/][AlertManager]], [[https://grafana.com/][grafana]] and [[https://grafana.com/oss/loki/][loki]])
+for observablility.
+
 
 * Principles
 My principles can be best described as [[https://github.com/cncf/toc/blob/main/DEFINITION.md][cloud nativeness]]. Cloud-native is an all-encompassing and vague term.
@@ -125,8 +128,8 @@ This is my current setup. Envoy, traefik and aioproxy are a great match. Client 
 and forwarded to traefik. Depending on the packet format, traefik would forward it to HTTP traffic to docker or Kubernetes, other TCP traffic to aioproxy
 (this works by setting SNI to rules to match ~Host("*")~, see [[https://community.traefik.io/t/routing-ssh-traffic-with-traefik-v2/717][here]]), the PROXY protocol header is automatically peeled off when possible.
 It is not transparent to aioproxy. I don't intend to optimize it for now. In fact, it would be better if I insert aioproxy
-in front of traefik, as this way every service is now ignorant of the proxy. But I didn't implement intelligent transparent proxy mentioned
-above yet (this is fairly easy, and I am fairly lazy).
+in front of traefik, as this way every service is now ignorant of the proxy.
++But I didn't implement intelligent transparent proxy mentioned above yet (this is fairly easy, and I am fairly lazy currently).+ It's now done.
 There will be some problem when client and transparent proxy are on the same host, which is a frequent user case for me.
 
 ** Intermission: Split Horizon DNS
@@ -337,6 +340,59 @@ Here is my nix configuration.
 #+end_src
 I back up my data every day to two backend storage.
 
+* Observablility
+I use grafana, loki, prometheus for observablility. I can't praise enough this squad for its simplicity to set up.
+I basically just set up the components separately. They just work. Also, it is a share-nothing architecture, so
+in order to acheive high availbility, all I need to do is add a new remote write target. For that, I use [[https://grafana.com/products/cloud/][grafana cloud]].
+
+** Metrics
+Prometheus is pull based. It is quite easy to obtain nodes data from node exporter. Besides, almost all services now expose prometheus metrics.
+
+** Logs
+Loki lives up to its promise -- like prometheus, for logs. It is harder for loki to search things, but it is tolerable for me.
+
+** Visualization
+Grafana.
+
+** TODO Alerts
+Alert manager.
+
+* Continuous Integration/Continuous Delivery
+** Worker
+Github is quite generous for the offer of github actions. The free machines' performance is quite good.
+It is no wonder that there are many [[https://github.blog/2021-04-22-github-actions-update-helping-maintainers-combat-bad-actors/][miners trying to abuse them]]. As good as github actions, there are two nuisances for my usage.
++ disk size. The closure size of my toplevel system profile easily exceeds the size limit. I need to [[https://github.com/contrun/infra/blob/01478dd058f9b273644c8800dcd1bc2bf36408a7/.github/workflows/nix.yml#L104-L156][clean up some packages]] to get more free disk space.
+Some of my machines' profile can be as large as 70G. There is no way for github actions to build a profile that large.
++ running time limit. Nix channel updates can invaildate many binary caches. I need to build so many packages that github actions workflow frequently times out.
+I need to manually rerun it. I have to cache my build artifacts with cachix.
+
+** Artifacts store
+[[https://r13y.com/][Most of nix's builds are reproducible]]. The nix derivation output path depends on the hashes of the build inputs. Given the same inputs, we can easily
+check if there are valid binary cache for the output. I use [[https://www.cachix.org/][cachix]] to cache my builds. Think cachix as a docker container registry.
+It is quite straightforward to use [[https://github.com/cachix/cachix-action][cachix action]]. I also setting up cachix in my local machines, so that I can use the building results of github actions worker.
+It greatly reduces the building time on my local machines.
+
+** Deployment
+I use [[https://github.com/serokell/deploy-rs][deploy-rs]] to deploy my nixos configuration to the target machine. deploy-rs reads my ~flake.nix~, builds the profile on the machine running deploy-rs command.
+It then copies the profile to target machine via ssh. Depending on my configuration, it may choose to download binary caches from subsitutes firstly
+(thus reduces time by avoid possible slow ssh connection). It should be noted that deploy build the profile on local machine. This is important for me as
+many of my machines are not powerful enough to build a profile quickly. deploy-rs also has elementary sanity check, e.g. automatically rollback to previous
+generation of profile if ssh connection didn't come back after switch to the new profile.
+The only remaining complication is ssh connectivity.
+
+** Node Connectivity
+To establish connectivity from github actions runner to my server, I use [[https://github.com/erebe/wstunnel][wstunnel]]. Well, this time I use port-mapping solution.
+Note that wstunnel dig tunnels over websocket. And I have described a lot about how I can access my services over http above.
+So this is quite a no-brainer for me to set up a tunnel. All I need to do is running wstunnel in server mode, set up a routing for it, and then
+~ssh -o ProxyCommand="wstunnel --upgradePathPrefix=some-superb-secret-path -L stdio:%h:%p wss://wstunnel.example.com" hub.localhost~
+I kept the routing path ~some-superb-secret-path~ secret so that it would be impossible for other people to arbitrarily establish a tunnel to my machine.
+
+** Secrets management
+One more thing, how to make github actions runner's ssh connection to my machines more secure. I fully agree the sentimental of [[https://smallstep.com/blog/use-ssh-certificates/][this article]].
+We should use ssh certificates as more as possible. The question is now how to securely use ssh certificates. I need a system to automatically issue short-lived
+certificates. This system must be fully programmable. [[https://smallstep.com/certificates/][Smallstep certificates]] is not good in terms of programmability. I use [[https://www.vaultproject.io/docs/secrets/ssh][Hashicorp Vault ssh secret engine]] for this.
+[[https://github.com/contrun/infra/commit/63f4456757cb082279e83ae0e4ec1a0ded6ec227][Here]] is how I use valut to issue short-lived ssh certificates.
+
 * Proxy
 It is a mandate to use a proxy on my machines, as too many websites are blocked in China. I can't tolerate my wallabag instance is unable to access articles on Wikipedia.
 I use [[https://github.com/Dreamacro/clash][clash]] and iptables for transparent proxy. [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/dot_bin/executable_clash-redir][Here]] is the script, and [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L2013-L2107][here]] is the systemd unit to run the script and update clash configuration.
@@ -374,6 +430,11 @@ Oh, dear god, iptables is hard. I wish there is an easier way to transparent pro
 + TUN
 + macvlan virtual machine
 
+* Server Management
+** wstunnel
+** ttyd
+** aioproxy
+
 * Next Step
 ** Kubernetes after All?
 I abandoned my plan of using Kubernetes for all. Currently, I refrain my usage of Kubernetes because first I didn't find a satisfactory workflow
@@ -389,6 +450,6 @@ I hope it lives up to its promise. Also, [[https://mrkaran.dev/posts/home-server
 ** Configuration Database
 Nix is great. But it is hard for outside world to learn my nix configuration.
 ** Security Hardening
-** Observablility
 ** Federated Storage
 ** Grand Unification
+** Personal Data Warehouse
