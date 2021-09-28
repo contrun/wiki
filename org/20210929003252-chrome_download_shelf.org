@@ -1,0 +1,77 @@
+#+title: Chrome download shelf
+#+roam_tags: "chrome" "internals"
+Chrome download shelf is the widget shown in the buttom when you initiate a new download. This document summarizes how the download shelf is implemented.
+It is sketchy on the details. For more information, click on the source code or documentation links.
+
+* How to inspect chrome browser ui components
+In short, run chrome with ~chromium --enable-ui-devtools=1234~ and open url ~chrome://inspect/#native-ui~.
+See also [[https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/docs/ui/ui_devtools/index.md][UI DevTools Overview]] and [[https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/docs/ui/learn/ui_debugging.md][Chromium Desktop UI Debugging Tools and Tips]].
+
+* Layout in browser window
+** How to layout a new component
+The elements of chromium UI are [[https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/docs/ui/views/overview.md][views]]. A View is a UI element, similar to an HTML DOM element. In order to create new UI componenets, we need to create corresponding views.
+Take download shelf as an example, the entrypoint to register new browser views is ~browser_view_layout.cc~.
+[[https://github.com/chromium/chromium/blob/cee4f7f8dbd430f896107825de7b7e52793b9027/chrome/browser/ui/views/frame/browser_view_layout.cc#L643-652][Here]] is how chromium layout download shelf in the main window, where the ~download_shelf_~ is a view created [[https://github.com/chromium/chromium/blob/5ab57336e2ba9f31d068fafbba236ba3ecf94519/chrome/browser/ui/views/frame/browser_view.cc#L1992-2004][here]].
+
+* Download shelf
+** Implementations
+There are currently two implementations for the download shelf. [[https://github.com/chromium/chromium/blob/de2dbd2f021b363033309eb740dad3f84dd9d47c/chrome/browser/ui/views/download/download_shelf_view.cc][One]] is implemented in c++ with MVC architecture, while [[https://github.com/chromium/chromium/blob/bddb2627588da1698987a67bd503d1766962dc2c/chrome/browser/ui/views/download/download_shelf_web_view.cc][the other]] is implemented with [[https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_explainer.md][webui]] using web technologies.
+
+** MVC Architecture
+Chromium uses the well-known MVC design pattern to layout UI components, although sometimes model, view and controller are not strictly separated.
+
+Here is a diagram which illustrates how mvc architecture works.
+
+[[file:assets/images/mvc.jpeg]]
+
+The download shelf view is the UI that is visiable to the user. The user may interact with the download shelf, which then leverages the controller functions to update the download items.
+
+For example, when the user click on the context menu (shown by [[https://github.com/chromium/chromium/blob/bddb2627588da1698987a67bd503d1766962dc2c/chrome/browser/ui/views/download/download_shelf_web_view.cc#L144-158][~DownloadShelfWebView::ShowDownloadContextMenu~]]) of a download item on the download shelf. The download shelf view executes this download command by
+calling [[https://github.com/chromium/chromium/blob/bddb2627588da1698987a67bd503d1766962dc2c/chrome/browser/download/download_commands.cc#L161-166][~DownloadCommands::ExecuteCommand~]], which in turn calls [[https://github.com/chromium/chromium/blob/bbf9b18a210bdc2e678d6fa83d52c8ce4de2b46b/chrome/browser/download/download_ui_model.cc#L599-654][DownloadUIModel::ExecuteCommand]] of the ~DownloadUIModel~.
+
+When the download items are modified, the views may be updated according by the controllers. The download item models notify controller for updates using the observer design pattern.
+
+For example, [[https://github.com/chromium/chromium/blob/ff9ee2b6257ea513db88fe9fe2a4f6263908d197/chrome/browser/download/download_ui_controller.h#L18-54][~DownloadUIController~]] [[https://en.wikipedia.org/wiki/Observer_pattern][observes]] download item modifications, the notifications are sent by the download manager core services (~DownloadNotificationManager~).
+When a new download item is ready, download core service calls [[https://github.com/chromium/chromium/blob/b6ddfbc505103f71848bc463dd5c598f5b332f86/chrome/browser/download/notification/download_notification_manager.cc#L22-41][~DownloadNotificationManager::OnNewDownloadReady~]], which then calls [[https://github.com/chromium/chromium/blob/08e7ed8fb282e0857ac74d9c01f449be3754385b/chrome/browser/download/download_ui_controller.cc#L79-109][~DownloadShelfUIControllerDelegate::OnNewDownloadReady~]], which in turn
+calls ~browser->window()->GetDownloadShelf()->AddDownload(std::move(model))~ to make the download item show up on the download shelf.
+
+** Download items
+There are three data models for the download items.
+
+*** Download UI model
+[[https://github.com/chromium/chromium/blob/bbf9b18a210bdc2e678d6fa83d52c8ce4de2b46b/chrome/browser/download/download_ui_model.h][~DownloadUIModel~]] is an interface to define methods to operate on download items (e.g. pasue, resume downloads), show download item status (e.g. saved file name, downloading status).
+
+*** Download item model
+[[https://github.com/chromium/chromium/blob/7c64c7c7941e92a0569b62afca196fd331c131cd/chrome/browser/download/download_item_model.h#L24][~DownloadItemModel~]] is just a [[https://github.com/chromium/chromium/blob/7c64c7c7941e92a0569b62afca196fd331c131cd/chrome/browser/download/download_item_model.h#L27][wrapper]] around [[https://github.com/chromium/chromium/blob/7055d591db3f3aa416c0db825ab49c8b281866d0/components/download/public/common/download_item.h][~download::DownloadItem~]], which implements the download UI model interface.
+
+*** Download item
+[[https://github.com/chromium/chromium/blob/7055d591db3f3aa416c0db825ab49c8b281866d0/components/download/public/common/download_item.h][~download::DownloadItem~]] is the underlying download item implementation. It defines what represents a download item, how to serialize download items, how to store their states, etc.
+
+*** Menu and commands
+To show a simple context menu, we need to inherit [[https://github.com/chromium/chromium/blob/2b2b679ab421f84f6e1fdc671772029e66acbfc8/ui/base/models/simple_menu_model.h#L32-75][~ui::SimpleMenuModel::Delegate~]]. A ~SimpleMenuModel::Delegate~ subclass needs to define some commands and their actions.
+Commands correspond to menu items. When a menu item is clicked, the corresponding action is executed.
+
+* Webui download shelf
+“WebUI” is a term used to loosely describe parts of Chrome's UI implemented with web technologies (i.e. HTML, CSS, JavaScript).
+
+** Communication Between the Browser and WebUI web page
+Bi-direction communication by [[https://chromium.googlesource.com/chromium/src/+/HEAD/mojo/README.md][mojo]] (a high level IPC abstraction).
+*** Data definition and RPC
+The data structures and rpc interfaces are defined in [[https://github.com/chromium/chromium/blob/2aa264c2b51a5ff4856a6afbf2b640aa4d452491/chrome/browser/ui/webui/download_shelf/download_shelf.mojom][~download_shelf.mojom~]]. It contains what structures represent a download when passing from browser to webpage, and vice versa, and what remote procedure calling does the browser provide.
+Note that the download items defined here is different from [[https://github.com/chromium/chromium/blob/7055d591db3f3aa416c0db825ab49c8b281866d0/components/download/public/common/download_item.h][~download::DownloadItem~]]. We may need to convert from one to another.
+
+*** Browser side handler
+Browser side handlers are normally called ~PageHandler~. The download shelf ~PageHandler~ defines methods to accept rpc request from the website, execute the relevant methods, and return the results.
+Examples are opening the downloaded item, removing a download. The interface is [[https://github.com/chromium/chromium/blob/2aa264c2b51a5ff4856a6afbf2b640aa4d452491/chrome/browser/ui/webui/download_shelf/download_shelf.mojom#L196-222][here]]. It is implemented [[https://github.com/chromium/chromium/blob/bddb2627588da1698987a67bd503d1766962dc2c/chrome/browser/ui/webui/download_shelf/download_shelf_ui.cc][here]] in the browser. The method calls are delegated to the underlying download models.
+The webui client calls these methods by the generated mojo apis.
+
+*** Web page side handler
+Web page side handlers are normally called ~Handler~. They are used by the web page to handled native RPC requests from the browser. When the browser did something, it may want to notify the browser for its effects,
+e.g. there is a new download, the webui may want to show it on its interface. [[https://github.com/chromium/chromium/blob/2aa264c2b51a5ff4856a6afbf2b640aa4d452491/chrome/browser/ui/webui/download_shelf/download_shelf.mojom#L224-238][Here]] are the download shelf web page handlers. There are implmented in javascript [[https://github.com/chromium/chromium/blob/c78ebea75e7997ae4251dd1b633069f4d56d2bab/chrome/browser/resources/download_shelf/download_list.ts][here]].
+
+** UI embedding
+The webui have low barriers to entry, but it may lack some desirable effects. For example, we may need to show a native menu. We need to define a UI embedder to show native context menu.
+The download shelf define a ~DownloadShelfUIEmbedder~ [[https://github.com/chromium/chromium/blob/6d25ca3911cab6c97ea862ab04432fa7f65fa810/chrome/browser/ui/webui/download_shelf/download_shelf_ui_embedder.h][here]]. When the user right clicks on a download item, he actually sees the context menu of the [[https://github.com/chromium/chromium/blob/6d25ca3911cab6c97ea862ab04432fa7f65fa810/chrome/browser/ui/views/download/download_shelf_web_view.h#L71][~DownloadShelfContextMenuView~]] which is able to display native context menu.
+
+** WebUI registration
+To register a ~chrome://~ url for a webui, we need to register it in the ~GetWebUIFactoryFunction~. [[https://github.com/chromium/chromium/blob/a19d59a885991f5b8be03bbc37926410e307299a/chrome/browser/ui/webui/chrome_web_ui_controller_factory.cc#L679-681][Here]] is how download shelf is registered.
