@@ -21,3 +21,6 @@ build-minial:
 
 serve:
 	hugo server
+
+clean:
+	rm -rf .emacs.d public
