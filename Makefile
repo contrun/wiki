@@ -8,6 +8,9 @@ endif
 
 all: convert build serve
 
+submodule:
+	git submodule update --recursive --init
+
 release: convert build-minial
 
 convert:
