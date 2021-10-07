@@ -1,5 +1,8 @@
+:PROPERTIES:
+:ID:       0e99f715-6ea9-47e2-98ab-f40ed0d37868
+:END:
 #+title: identity-aware proxy
-#+roam_tags: proxy "zero trust"
+#+filetags: :proxy:zero_trust:
 
 An identity-aware proxy is a reverse proxy which forwards normal payload and attaches the identity information to the backend servers.
 

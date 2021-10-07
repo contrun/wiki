@@ -1,2 +1,5 @@
+:PROPERTIES:
+:ID:       4948eeb8-df11-4f28-919d-d416a34e6109
+:END:
 #+title: self-hosted services
-TODO. For now, See [[file:20210510164540-self_hosted_infrastructure.org][self-hosted infrastructure]].
+TODO. For now, See [[id:754d60ad-ca82-4f75-8aab-f80b674b4a79][self-hosted infrastructure]].

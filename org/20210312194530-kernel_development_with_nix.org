@@ -1,5 +1,8 @@
+:PROPERTIES:
+:ID:       bc0d886b-d51f-4277-9c19-8f4c93c98c94
+:END:
 #+title: kernel development with nix
-#+roam_tags: qemu "linux kernel" nix
+#+filetags: :qemu:linux_kernel:nix:
 
 See also [[https://nixos.wiki/wiki/Kernel_Debugging_with_QEMU][Kernel Debugging with QEMU]].
 

@@ -1,3 +1,6 @@
+:PROPERTIES:
+:ID:       9bec89cb-c17e-44bd-a1b0-c368f7370f09
+:END:
 #+title: quine in haskell
 
 See [[https://blog.matthewbarber.io//2019/07/22/how-to-make-compressed-file-quines.html][How to make compressed file quines, step by step]]

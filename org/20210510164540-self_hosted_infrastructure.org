@@ -1,5 +1,8 @@
+:PROPERTIES:
+:ID:       754d60ad-ca82-4f75-8aab-f80b674b4a79
+:END:
 #+title: self-hosted infrastructure
-#+roam_tags: "incremental backup" docker nix ansible kubernetes "split horizon dns" "transparent proxy" "software-defined networking" "infrastructure as code" "cloud native" "load balancers" "overlay networks" "mesh networking"
+#+filetags: :incremental_backup:docker:nix:ansible:kubernetes:split_horizon_dns:transparent_proxy:software_defined_networking:infrastructure_as_code:cloud_native:load_balancers:overlay_networks:mesh_networking:
 
 TLDR: I use [[https://tailscale.com/][tailscale]]/[[https://www.zerotier.com/][zerotier]] to establish a smallish mesh network. I use [[https://www.envoyproxy.io/][envoy]] as an edge router to forward L4 traffic.
 I mainly provision and manage services with [[https://nixos.org/][nix]], [[https://www.docker.com/][docker]] and [[https://github.com/mozilla/sops][sops]]. When it is absolutely required, I use [[https://k3s.io/][k3s]] to deploy [[https://kubernetes.io/][Kubernetes]] services.
@@ -297,12 +300,12 @@ and the configuration is shared.
 *** Strength
 What I really like about authelia is its simplicity and easy integration with traefik.
 *** Future
-I want to use a [[https://cloud.google.com/beyondcorp][beyondcorp]] style [[file:20210311234743-identity_aware_proxy.org][identity-aware proxy]] with [[https://www.openpolicyagent.org/][open policy agent]] support some other day. The last time I checked [[https://www.pomerium.com/][pomerium]],
+I want to use a [[https://cloud.google.com/beyondcorp][beyondcorp]] style [[id:0e99f715-6ea9-47e2-98ab-f40ed0d37868][identity-aware proxy]] with [[https://www.openpolicyagent.org/][open policy agent]] support some other day. The last time I checked [[https://www.pomerium.com/][pomerium]],
 I found envoy was hard to pack and pomerium was too oidc-centric, most of all it did not support ldap or other local user database.
 
 ** SSO
 Authelia just landed [[https://github.com/authelia/authelia/issues/189][openid connect support]]. I haven't tried it yet. One more thing about authelia is that I currently use a single text file as account backend.
-I have set up [[https://www.openldap.org/][openldap]] on my machines, but I haven't tried it on authelia yet. I intend to use [[https://www.freeipa.org/page/Main_Page][freeipa]] instead, which is much more versatile.
+I have set up [[https://www.openldap.org/][openldap]] on my machines, but I haven't tried it on authelia yet. I intend to use [[https://www.freeipa.org/page/Main_Page][freeipa]] instead (tried container, systemd within the container didn't work), which is much more versatile.
 
 ** Intrusion Prevention
 Because of my distrust to other people's computer, I intentionally made my edge proxy to be as dumb as possible.
@@ -453,3 +456,4 @@ Nix is great. But it is hard for outside world to learn my nix configuration.
 ** Federated Storage
 ** Grand Unification
 ** Personal Data Warehouse
+** Accounts (ldap)

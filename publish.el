@@ -40,7 +40,8 @@
   :init
   (setq org-roam-directory my/org-dir)
   (setq org-roam-db-location (expand-file-name "org-roam.db" my/org-dir))
-  (org-roam-mode)
+  (setq org-roam-v2-ack t)
+  (org-roam-db-autosync-mode)
   (unless (file-exists-p org-id-locations-file)
     (let ((org-id-files (org-roam--list-files org-roam-directory))
           org-agenda-files)
