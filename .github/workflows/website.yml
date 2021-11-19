@@ -20,7 +20,7 @@ jobs:
       - name: Generate dotenv file
         run: |
           cat <<EOF | tee -a .env.default
-          HUGO_VERSION=0.83.0
+          HUGO_VERSION=0.88.1
           EMACS_VERSION=27.2
           NODE_VERSION=14
           EOF
@@ -43,7 +43,7 @@ jobs:
 
       - uses: purcell/setup-emacs@v3.0
         with:
-          version: '${{ env.EMACS_VERSION }}'
+          version: snapshot
 
       - name: Cache emacs dependencies
         uses: actions/cache@v2
@@ -56,7 +56,7 @@ jobs:
       - name: Setup hugo
         uses: peaceiris/actions-hugo@v2
         with:
-          hugo-version: '${{ env.HUGO_VERSION }}'
+          hugo-version: latest
           extended: true
 
       - name: Cache hugo modules
@@ -69,8 +69,9 @@ jobs:
 
       - name: Setup node
         uses: actions/setup-node@v2
+        # Not able to specify latest node. https://github.com/actions/setup-node/issues/257
         with:
-          node-version: '${{ env.NODE_VERSION }}'
+          node-version: 14
 
       - name: Cache node dependencies
         uses: actions/cache@v2
