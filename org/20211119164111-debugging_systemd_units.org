@@ -1,0 +1,58 @@
+:PROPERTIES:
+:ID:       650c7f26-43b5-4bd4-aa38-19e6c5f36a81
+:END:
+#+title: debugging systemd units
+
+A systemd unit failed, and it worked great when you run the command manually. What the fuck happend?
+The running environment of your systemd services is different from your command line. It can be hard to reproduce.
+
+
+* override units with tmux as ExecStart
+Say, I need to debug a restic systemd unit. I have set a few environment variables. I need to access some state directory and cache directory.
+I need to run a few prestart commands. All these are done with high privilege. Below is the systemd unit.
+
+#+begin_src shell
+sudo systemctl cat restic-backups-sync-backup-primary.service --no-pager
+# /etc/systemd/system/restic-backups-sync-backup-primary.service
+[Unit]
+
+[Service]
+Environment="LOCALE_ARCHIVE=/nix/store/zyc47fh4nkj9anf3cqb5hd87j2dvj5xv-glibc-locales-2.33-55/lib/locale/locale-archive"
+Environment="PATH=/nix/store/inypg9myh5j40ym2qzwcdr1zphwnlns9-openssh-8.8p1/bin:/nix/store/qmn7m3wk8b1v1ljhb2dzyjh41d6ingp6-coreutils-9.0/bin:/nix/store/0xzqirrdxw4h9kr0sq4rp1chad5v8fg9-findutils-4.8.0/bin:/nix/store/vcffj451l0bymy3gzkhb9hs4yk0g9yjm-gnugrep-3.7/bin:/nix/store/d9drqi4daha3f0b6wm5y0fnabbggy1r2-gnused-4.8/bin:/nix/store/zsj8b2bkri3yf2hjwh2v1w9w7v5b58ds-systemd-249.4/bin:/nix/store/inypg9myh5j40ym2qzwcdr1zphwnlns9-openssh-8.8p1/sbin:/nix/store/qmn7m3wk8b1v1ljhb2dzyjh41d6ingp6-coreutils-9.0/sbin:/nix/store/0xzqirrdxw4h9kr0sq4rp1chad5v8fg9-findutils-4.8.0/sbin:/nix/store/vcffj451l0bymy3gzkhb9hs4yk0g9yjm-gnugrep-3.7/sbin:/nix/store/d9drqi4daha3f0b6wm5y0fnabbggy1r2-gnused-4.8/sbin:/nix/store/zsj8b2bkri3yf2hjwh2v1w9w7v5b58ds-systemd-249.4/sbin"
+Environment="RCLONE_CONFIG=/run/secrets/rclone-config"
+Environment="RESTIC_PASSWORD_FILE=/run/secrets/restic-password"
+Environment="RESTIC_REPOSITORY=rclone:backup-primary:restic"
+Environment="TZDIR=/nix/store/g0gjppf876jkk2p54v5mg20xgizns662-tzdata-2021c/share/zoneinfo"
+
+X-RestartIfChanged=false
+
+
+CacheDirectory=restic-backups-sync-backup-primary
+CacheDirectoryMode=0700
+ExecStart=/nix/store/l00kzj65rxnj4q7fj1q85p12z6g83h9q-restic-0.12.1/bin/restic backup --cache-dir=%C/restic-backups-sync-backup-primary -v=3 --exclude-larger-than=500M --exclude=.git --exclude-file=/nix/store/5a9zpgqzqd3gbc13r5m5871pqxwzrw4b-restic-excluded-files /home/e/Sync
+ExecStart=/nix/store/l00kzj65rxnj4q7fj1q85p12z6g83h9q-restic-0.12.1/bin/restic forget --prune --keep-daily 7 --keep-weekly 5 --keep-monthly 12 --keep-yearly 75
+ExecStart=/nix/store/l00kzj65rxnj4q7fj1q85p12z6g83h9q-restic-0.12.1/bin/restic check
+ExecStartPre=/nix/store/160xjy82nllr70pf7nwj0ppwfksnl6wk-unit-script-restic-backups-sync-backup-primary-pre-start/bin/restic-backups-sync-backup-primary-pre-start
+RuntimeDirectory=restic-backups-sync-backup-primary
+Type=oneshot
+User=root
+
+
+# /run/systemd/system/restic-backups-sync-backup-primary.service.d/override.conf
+[Service]
+ExecStart=
+ExecStartPre=
+ExecStart=/nix/store/f5kaj2hrnlc4v99gjlic1jygvlq41x55-system-path/bin/tmux new-session -s debug-systemd-unit -d
+Type=forking
+#+end_src
+
+As you can see from the ~override.conf~, we first clear off ~ExecStart~, ~ExecStartPre~, and then start a debug tmux session.
+We can then attach the created tmux session with ~tmux attach-session -t debug-systemd-unit~.
+Note the ~-d~ argument in ~ExecStart~, it is required for tmux to run in a systemd unit. See [[https://stackoverflow.com/a/41986209][this answer]].
+
+* systemd-run
+Another way is to create a temporary unit with system-run. Depending on the complexity of your task, this can be more tendious or less tendious.
+Here is an example to run curl with SupplementaryGroups.
+#+begin_src shell
+sudo systemd-run -p SupplementaryGroups="noproxy" --uid $USER --pty --same-dir --wait --collect --service-type=exec curl https://cloudflare-quic.com/b/ip
+#+end_src
