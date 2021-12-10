@@ -7,7 +7,7 @@
 TLDR: I use [[https://tailscale.com/][tailscale]]/[[https://www.zerotier.com/][zerotier]] to establish a smallish mesh network. I use [[https://www.envoyproxy.io/][envoy]] (not anymore, I now use nginx) as an edge router to forward L4 traffic.
 I mainly provision and manage services with [[https://nixos.org/][nix]], [[https://www.docker.com/][docker]] and [[https://github.com/mozilla/sops][sops]]. When it is absolutely required, I use [[https://k3s.io/][k3s]] to deploy [[https://kubernetes.io/][Kubernetes]] services.
 [[https://traefik.io/][Traefik]] is used for routing, and [[https://github.com/authelia/authelia][authelia]] is used for blocking unauthorized access.
-To multiplexing protocols with a single port, I use [[https://github.com/contrun/aioproxy/][aioproxy]]. I use [[https://restic.net/][restic]] to back up my inevitably accumulated state. For CI/CD,
+To multiplexing protocols with a single port, I use [[https://github.com/contrun/aioproxy/][aioproxy]]. I use [[https://github.com/jimsalterjrs/sanoid/][syncoid]] and [[https://restic.net/][restic]] to back up my inevitably accumulated state. For CI/CD,
 I use [[https://github.com/features/actions][github actions]], [[https://www.vaultproject.io/][hashicorp vault]], [[https://github.com/serokell/deploy-rs][depoly-rs]] and [[https://www.cachix.org/][cachix]]. I use the grafana stack ([[https://prometheus.io/][prometheus]], [[https://prometheus.io/docs/alerting/latest/alertmanager/][AlertManager]], [[https://grafana.com/][grafana]] and [[https://grafana.com/oss/loki/][loki]])
 for observablility.
 
@@ -392,7 +392,15 @@ Because of my distrust to other people's computer, I intentionally made my edge 
 There ain't such thing as intrusion detection system yet. Setting up fail2ban is easy, but I need to integrate it with traefik and aioproxy.
 
 * Backup
-Of all the incremental backup tools, there are two distinctive features about [[https://restic.net/][restic]].
+** syncoid
+I use [[https://github.com/jimsalterjrs/sanoid/][syncoid]] for on-site backup. Syncoid is basically a
+`zfs send | zfs receive` wrapper. With naive `rsync -avzh --process`, I can easily encounter database conruption. Thanks to Zfs' hard work, I don't have to worry about this consistency.
+Syncoid also works incrementally. Another advantage of this method is that I can easily restore an entire zpool. But it requires a lot of free space, and it may take a while to finish.
+I attached an external disk to my main computer.
+
+** restic
+I use [[https://restic.net/][restic]] for off-site backup.
+Of all the incremental backup tools, there are two distinctive features about restic.
 First, it supports all [[https://rclone.org/][rclone]] backends, second, I can back up different directories from different hosts to the same endpoint.
 Here is my nix configuration.
 #+begin_src nix
@@ -422,6 +430,8 @@ Here is my nix configuration.
     };
 #+end_src
 I back up my data every day to two backend storage.
+For some files, I need to manually tune the back-up process. For example, to back up postgresql database,
+I need to run pg_dump first. This may lock the whole table.
 
 * Observablility
 I use grafana, loki, prometheus for observablility. I can't praise enough this squad for its simplicity to set up.
