@@ -4,7 +4,7 @@
 #+title: self-hosted infrastructure
 #+filetags: :incremental_backup:docker:nix:ansible:kubernetes:split_horizon_dns:transparent_proxy:software_defined_networking:infrastructure_as_code:cloud_native:load_balancers:overlay_networks:mesh_networking:
 
-TLDR: I use [[https://tailscale.com/][tailscale]]/[[https://www.zerotier.com/][zerotier]] to establish a smallish mesh network. I use [[https://www.envoyproxy.io/][envoy]] as an edge router to forward L4 traffic.
+TLDR: I use [[https://tailscale.com/][tailscale]]/[[https://www.zerotier.com/][zerotier]] to establish a smallish mesh network. I use [[https://www.envoyproxy.io/][envoy]] (not anymore, I now use nginx) as an edge router to forward L4 traffic.
 I mainly provision and manage services with [[https://nixos.org/][nix]], [[https://www.docker.com/][docker]] and [[https://github.com/mozilla/sops][sops]]. When it is absolutely required, I use [[https://k3s.io/][k3s]] to deploy [[https://kubernetes.io/][Kubernetes]] services.
 [[https://traefik.io/][Traefik]] is used for routing, and [[https://github.com/authelia/authelia][authelia]] is used for blocking unauthorized access.
 To multiplexing protocols with a single port, I use [[https://github.com/contrun/aioproxy/][aioproxy]]. I use [[https://restic.net/][restic]] to back up my inevitably accumulated state. For CI/CD,
@@ -133,7 +133,7 @@ and forwarded to traefik. Depending on the packet format, traefik would forward 
 It is not transparent to aioproxy. I don't intend to optimize it for now. In fact, it would be better if I insert aioproxy
 in front of traefik, as this way every service is now ignorant of the proxy.
 +But I didn't implement intelligent transparent proxy mentioned above yet (this is fairly easy, and I am fairly lazy currently).+ It's now done.
-There will be some problem when client and transparent proxy are on the same host, which is a frequent user case for me.
+There will be some problem when client and transparent proxy are on the same host, which is a frequent use case for me.
 
 ** Intermission: Split Horizon DNS
 I have a few ways to access my services. When I use my own devices, I can just access my services by overlay networks.
@@ -191,6 +191,12 @@ To resolve ~hostname.local~, I use [[https://www.avahi.org/][avahi]] to [[https:
 in the sense that all hosts need only to configure themselves. To use this DNS server for all applications,
 I configured systemd-resolved [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L773-L780][here]]. It is also possible to make other devices in the overlay network
 to use this DNS server. I haven't done it yet.
+*** Multicasting
+[[https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution][LLMNR]] and [[https://en.wikipedia.org/wiki/Multicast_DNS][mDNS]] can be leveraged to resolve hosts, if your VPN support multicasting
+(which zerotier supports, while tailscale doesn't support yet). The downside is that,
+most resolvers only supports single lable for LLMNR, and `.local` postfix is required for mDNS.
+So you can not easily resolve usual domain like `test.example.com` to host `test`.
+The solution is to use coredns as described above.
 
 ** L7
 Now that we can resolve domains to desirable hosts, we can access services directly in the browser.
@@ -199,6 +205,80 @@ I use acme with dns-chanlledge. My DNS service provider is cloudflare. From [[ht
 ~*.hostname.mydomain.tld~, ~*.local.mydomain.tld~, optionally also some alias domains like ~*.hub.mydomain.tld~.
 The certificates are obtained by setting [[https://search.nixos.org/options?channel=20.09&from=0&size=50&sort=relevance&query=security.acme][NixOS options security.acme]], and are shared between multiple applications.
 Currently, TLS is terminated by traefik using above certificates.
+*** Edge Routing
+Given TLS termination is not handled by the edge routers, we can only do intelligent routing based [[https://en.wikipedia.org/wiki/Server_Name_Indication][SNI]].
+As far as I can tell, [[https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/sni_dynamic_forward_proxy_filter][SNI dynamic forward proxy]] of envoy relies heavily on the DNS server to find out
+which backend server to forward traffic. This is less than ideal in my use case, because with the help of systemd-resolved's LLMNR support
+(mDNS must be manually enabled for each interfaces, LLMNR seems to be easier to use), I can use easily resolve hostnames.
+All I need is obtaining a new hostname from the original hostname by a simple regex. I choose nginx over envoy to do that.
+Here is my nginx configuration.
+#+begin_src
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+stream {
+    log_format format '$remote_addr [$time_iso8601] '
+                     '$protocol $status $bytes_sent $bytes_received '
+                     '$session_time "$upstream_addr" '
+                     '"$upstream_bytes_sent" "$upstream_bytes_received" "$upstream_connect_time"';
+    access_log  /var/log/nginx/access.log format;
+
+    map $ssl_preread_server_name $ssl_backend {
+        ~^([^.]+\.)*alias\.[^.]+\.[^.]+$   real-server:$server_port;
+        ~^([^.]+\.)*(?P<my_hostname>[^.]+)\.[^.]+\.[^.]+$   $my_hostname:$server_port;
+        default default-server:$server_port;
+    }
+
+    map $hostname $backend {
+        ~^([^.]+\.)*alias\.[^.]+\.[^.]+$   real-server:$server_port;
+        ~^([^.]+\.)*(?P<my_hostname>[^.]+)\.[^.]+\.[^.]+$   $my_hostname:$server_port;
+        default $ssl_backend;
+    }
+
+    resolver 127.0.0.53 ipv6=off;
+
+    server {
+        listen 0.0.0.0:80 reuseport;
+        listen 0.0.0.0:2022 reuseport;
+        listen 0.0.0.0:2122 reuseport;
+        listen 0.0.0.0:2222 reuseport;
+        listen 0.0.0.0:443 reuseport;
+        listen 0.0.0.0:4443 reuseport;
+        listen 0.0.0.0:4000 reuseport;
+        listen 0.0.0.0:5678 reuseport;
+        listen 0.0.0.0:8080 reuseport;
+        listen 0.0.0.0:80 udp reuseport;
+        listen 0.0.0.0:2022 udp reuseport;
+        listen 0.0.0.0:2122 udp reuseport;
+        listen 0.0.0.0:2222 udp reuseport;
+        listen 0.0.0.0:443 udp reuseport;
+        listen 0.0.0.0:4443 udp reuseport;
+        listen 0.0.0.0:4000 udp reuseport;
+        listen 0.0.0.0:5678 udp reuseport;
+        listen 0.0.0.0:8080 udp reuseport;
+        proxy_pass $backend;
+        proxy_protocol on;
+        ssl_preread on;
+    }
+}
+#+end_src
+With this configuration, nginx can both forward http and https traffic based on TLS SNI and http hostname.
+~$my_hostname~ here is resolved by systemd-resolved.
+I also added some aliases to simplify management of domain name prefixes which do not have a backing hostname.
+This is needed as I find no easy way to add an alias to an existing domain (c.f. [[https://github.com/systemd/systemd/issues/11976][this issue]]).
+Also I didn't find any good LLMNR responder with customizable aliases.
+Note this is particularly easy to manage as nginx need not know its serving domain.
+I can add more edge proxies as needed. They work the same way. I can also add more backend servers as needed.
+All they need to respond to LLMNR requests.
+
 *** Service and Routing Registration
 Service and router registration is done in a self-organizing way.
 I don't use subpath routing rules, as it may require extra work of rewriting paths.
