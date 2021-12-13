@@ -49,54 +49,54 @@
 <p>We generalize Pederson Commitment to vectors. Let \((\overrightarrow{a_L}, \overrightarrow{a_R}) \in (\mathbb{Z}^n, \mathbb{Z}^n)\), we define the Pederson commitment to be the function \(PC: (\overrightarrow{a_L}, \overrightarrow{a_R}, r) \mapsto \sum a_{L_i} * g_i + \sum a_{R_i} * h_i + rh\) where \(h\), \(g_i\) and \(h_i\) are fixed base points, \(r\) is called the blinding factor of \((\overrightarrow{a_L}, \overrightarrow{a_R})\).</p>
 <h2 id=zen-of-range-checking>Zen of Range Checking</h2>
 <p>Instead of proving \(a\) is within the range \([0, 2^n)\) directly. We prove the following equivalent equation.</p>
-<p><a id=org9171b56></a></p>
+<p><a id=org44c1910></a></p>
 <p>\[a - \sum_{i=1}^{n} a_{L_i} \times 2^{i-1} = 0 \text{ (eqn:1)}\]</p>
-<p><a id=orgd6b4995></a></p>
+<p><a id=orgcdcc766></a></p>
 <p>\[a_{L_i} - 1 - a_{R_i} = 0, \forall i = 1, \cdots, n \text{ (eqn:2)}\]</p>
-<p><a id=orga2352a9></a></p>
+<p><a id=org95663fd></a></p>
 <p>\[a_{R_i} * a_{L_i} = 0, \forall i = 1, \cdots, n \text{ (eqn:3)}\]</p>
-<p>Combining <a href=#orgd6b4995>1</a> and <a href=#orga2352a9>1</a>, we have \((a_{L_i} - 1) * a_{L_i} = 0\), i.e. \(a_{L_i} = 1\) or \(a_{L_i} = 0\). Together with the first equation, we can see that \(a_{L_i}\) is the binary representation of \(a\). As we have only \(n\) \(a_{L_i}\), \(a\) is indeed within the range \([0, 2^n)\).</p>
+<p>Combining <a href=#orgcdcc766>1</a> and <a href=#org95663fd>1</a>, we have \((a_{L_i} - 1) * a_{L_i} = 0\), i.e. \(a_{L_i} = 1\) or \(a_{L_i} = 0\). Together with the first equation, we can see that \(a_{L_i}\) is the binary representation of \(a\). As we have only \(n\) \(a_{L_i}\), \(a\) is indeed within the range \([0, 2^n)\).</p>
 <p>Denote \(\overrightarrow{y_n}\), or simply \(\overrightarrow{y}\) when \(n\) is clear, \((1, y, \cdots, y^{n-1})\), \(overrightarrow{a_L} = (a_{L_1}, a_{L_2}, \cdots, a_{L_n})\), \(\overrightarrow{a_R} = (a_{R_1}, a_{R_2}, \cdots, a_{R_n})\). Let \(X\), \(Y\) be two vector in \(\mathbb{Z}^n\), we denote the Euclid inner product \(X\cdot Y\), the Hermitian product \(X \circ Y\).</p>
 <p>To verify the second equation, the verifier makes a challenge, a random scalar \(y\), to the prove. The prover proves that,</p>
-<p><a id=orgdf7e2ed></a></p>
+<p><a id=orgbb791ad></a></p>
 <p>\[ \sum_{i=1}^{i=n} (a_{L_i} - 1 - a_{R_i}) * y^{i-1} = 0 \text{ (eqn:4)}\]</p>
 <p>The left side of the above equation is a polynomial of degree at most \(n-1\), so it has at most \(n-1\) roots. \(y\) is highly unlikely to be a root of the polynomial unless all coefficients are zero.</p>
 <p>Using the same argument, verifying the following equation is enough for the third equation.</p>
-<p><a id=org22f85db></a></p>
+<p><a id=orgc864342></a></p>
 <p>\[ \sum_{i=1}^{i=n} (a_{L_i} * a_{R_i}) * y^{i-1} = 0 \text{ (eqn:5)}\]</p>
-<p>Rewrite equation <a href=#orgdf7e2ed>1</a> as \((\overrightarrow{a_L} - \overrightarrow{1_n} - \overrightarrow{a_R}) \cdot \overrightarrow{y_n} = 0\), rewrite equation <a href=#org22f85db>1</a> as \((\overrightarrow{a_L}) \cdot (\overrightarrow{a_R} \circ \overrightarrow{y_n}) = 0\), rewrite <a href=#org9171b56>1</a> as \(a - \overrightarrow{a_L} \cdot \overrightarrow{2_n} = 0\). Using the trick as above, we combine this equations to a single equation</p>
-<p><a id=org298c0fd></a></p>
+<p>Rewrite equation <a href=#orgbb791ad>1</a> as \((\overrightarrow{a_L} - \overrightarrow{1_n} - \overrightarrow{a_R}) \cdot \overrightarrow{y_n} = 0\), rewrite equation <a href=#orgc864342>1</a> as \((\overrightarrow{a_L}) \cdot (\overrightarrow{a_R} \circ \overrightarrow{y_n}) = 0\), rewrite <a href=#org44c1910>1</a> as \(a - \overrightarrow{a_L} \cdot \overrightarrow{2_n} = 0\). Using the trick as above, we combine this equations to a single equation</p>
+<p><a id=orga4feb49></a></p>
 <p>\[(\overrightarrow{a_L} - \overrightarrow{1_n} - \overrightarrow{a_R}) \cdot \overrightarrow{y_n} + \overrightarrow{a_L}\cdot (\overrightarrow{a_R} \circ \overrightarrow{y_n}) * z + (a - \overrightarrow{a_L} \cdot \overrightarrow{2_n})* z^2 = 0 \text{ (eqn:6)}\]</p>
 <p>This equation is equivalent to</p>
-<p><a id=org569cae5></a></p>
+<p><a id=orgdcb2d3d></a></p>
 <p>\[(\overrightarrow{a_L} - z\overrightarrow{1_n}) \cdot (\overrightarrow{a_R}\circ \overrightarrow{y_n} + z\overrightarrow{1_n}\circ \overrightarrow{y_n} + z^2 \overrightarrow{2_n}) = z^2 v + \delta(y, z) \text{ (eqn:7)}\]</p>
 <p>where \(\delta(y, z) = (z - z^2)(\overrightarrow{1_n} \cdot \overrightarrow{y_n}) - z^3 (\overrightarrow{1_n} \cdot \overrightarrow{2_n})\) is a term involves only \(y\) and \(z\).</p>
-<p>In order to make the range proof zero knowledge, we will add additional term \(\overrightarrow{s_L}x\) (resp. \(\overrightarrow{s_R}x\)) to \(\overrightarrow{a_L}\) (resp. \(\overrightarrow{a_R}\)), where \(\overrightarrow{s_L}, \overrightarrow{s_R} \in \mathbb{Z}^n\) are random vectors, \(x\) is unknown variable in \(\mathbb{Z}\). Thus the left-hand side of equation <a href=#org569cae5>1</a> is now a polynomial in \(x\) of degree 2. Adjust the right-hand side to a polynomial in \(x\) of degree 2, Then we have a equation of the following form</p>
-<p><a id=orgaedd9e6></a></p>
+<p>In order to make the range proof zero knowledge, we will add additional term \(\overrightarrow{s_L}x\) (resp. \(\overrightarrow{s_R}x\)) to \(\overrightarrow{a_L}\) (resp. \(\overrightarrow{a_R}\)), where \(\overrightarrow{s_L}, \overrightarrow{s_R} \in \mathbb{Z}^n\) are random vectors, \(x\) is unknown variable in \(\mathbb{Z}\). Thus the left-hand side of equation <a href=#orgdcb2d3d>1</a> is now a polynomial in \(x\) of degree 2. Adjust the right-hand side to a polynomial in \(x\) of degree 2, Then we have a equation of the following form</p>
+<p><a id=orgb85631d></a></p>
 <p>\[\overrightarrow{l(x)} \cdot \overrightarrow{r(x)} = t(x) \text{ (eqn:8)}\]</p>
 <p>where</p>
-<p><a id=org48f6213></a></p>
+<p><a id=org3265368></a></p>
 <p>\[\overrightarrow{l(x)} = \overrightarrow{a_L} + \overrightarrow{s_L}x - z\overrightarrow{1_n} \text{ (eqn:9)}\]</p>
-<p><a id=org6e82c7f></a></p>
+<p><a id=org9e7e1e3></a></p>
 <p>\[\overrightarrow{r(x)} = (\overrightarrow{a_R} + \overrightarrow{s_R}x) \circ \overrightarrow{y_n} + z\overrightarrow{1_n}\circ \overrightarrow{y_n} + z^2 \overrightarrow{2_n} \text{ (eqn:10)}\]</p>
-<p><a id=orgae41668></a></p>
+<p><a id=orgc36fdad></a></p>
 <p>\[t(x) = t_0 + t_1 x + t_2 x^2 = z^2 v + \delta(y, z) + t_1 x + t_2 x^2 \text{ (eqn:11)}\]</p>
 <h2 id=range-proof>Range Proof</h2>
 <p>We now view \(x\) as a chosen random scalar. Let \(V\) be the Pederson Commitment of \(v\), \(T_1\) be the Pederson Commitment of \(t_1\), \(T_2\) be the Pederson Commitment of \(t_2\), \(A = PC(\overrightarrow{a_L}, \overrightarrow{a_R}, \tilde{a})\), \(S = PC(\overrightarrow{s_L}, \overrightarrow{s_R}, \tilde{s})\), \(P = PC(\overrightarrow{l(x)}, \overrightarrow{r(x)}, \tilde{p})\).</p>
-<p>The range proof consists of \((V, A, S, T_1, T_2, \tilde{t}(x), t(x), \tilde{p})\) and a proof which proves that \(t(x)\) is indeed the inner product of \(\overrightarrow{l(x)}\) and \(\overrightarrow{r(x)}\), i.e. <a href=#orgaedd9e6>1</a> holds.</p>
-<p>To verify <a href=#org48f6213>1</a> and <a href=#org6e82c7f>1</a>, we note that knowing the blinding factor, the Pederson commitment of \((\overrightarrow{a_L} + \overrightarrow{s_L}x - z\overrightarrow{1_n}, (\overrightarrow{a_R} + \overrightarrow{s_R}x) \circ \overrightarrow{y_n} + z\overrightarrow{1_n}\circ \overrightarrow{y_n} + z^2 \overrightarrow{2_n})\) can be calculated from \(A, S\). Given the blinding factor of the Pedenson commitment of \(\overrightarrow{l(x)}, \overrightarrow{r(x)}\), we can calculate the commitment of \((\overrightarrow{l(x)}, \overrightarrow{r(x)})\) in the inner product proof. Thus we can only verify the given inner product proof with the commitment calculated from above.</p>
-<p>To verify <a href=#orgae41668>1</a>, we compare the commitment of \(t(x)\) with the commitment of \(z^2 v + \delta(y, z) + t_1 x + t_2 x^2\). The first term can be calculated directly with \(\tilde{t}(x), t(x)\), and the second term can be calculated with \(V, T_1, T_2\).</p>
+<p>The range proof consists of \((V, A, S, T_1, T_2, \tilde{t}(x), t(x), \tilde{p})\) and a proof which proves that \(t(x)\) is indeed the inner product of \(\overrightarrow{l(x)}\) and \(\overrightarrow{r(x)}\), i.e. <a href=#orgb85631d>1</a> holds.</p>
+<p>To verify <a href=#org3265368>1</a> and <a href=#org9e7e1e3>1</a>, we note that knowing the blinding factor, the Pederson commitment of \((\overrightarrow{a_L} + \overrightarrow{s_L}x - z\overrightarrow{1_n}, (\overrightarrow{a_R} + \overrightarrow{s_R}x) \circ \overrightarrow{y_n} + z\overrightarrow{1_n}\circ \overrightarrow{y_n} + z^2 \overrightarrow{2_n})\) can be calculated from \(A, S\). Given the blinding factor of the Pedenson commitment of \(\overrightarrow{l(x)}, \overrightarrow{r(x)}\), we can calculate the commitment of \((\overrightarrow{l(x)}, \overrightarrow{r(x)})\) in the inner product proof. Thus we can only verify the given inner product proof with the commitment calculated from above.</p>
+<p>To verify <a href=#orgc36fdad>1</a>, we compare the commitment of \(t(x)\) with the commitment of \(z^2 v + \delta(y, z) + t_1 x + t_2 x^2\). The first term can be calculated directly with \(\tilde{t}(x), t(x)\), and the second term can be calculated with \(V, T_1, T_2\).</p>
 <h2 id=aggregated-range-proof>Aggregated Range Proof</h2>
 <p>In our use case, we want to aggregate two range proofs. To aggregate range proofs of terms \(a^{(k)}, k = 1, \cdots, m\) are within the range \([0, 2^n)\), we have the following equations</p>
-<p><a id=orgd7a266c></a></p>
+<p><a id=org421a96f></a></p>
 <p>\[ a^{(k)} - \sum_{i=1}^{n} a^{(k)}_{L_i} \times 2^{i-1} = 0, \forall k = 1, \cdots, m \text{ (eqn:12)}\]</p>
-<p><a id=org8dafa42></a></p>
+<p><a id=org60124f3></a></p>
 <p>\[a^{(k)}_{L_i} - 1 - a^{(k)}_{R_i} = 0, \forall i = 1, \cdots, n, \forall k = 1, \cdots, m \text{ (eqn:13)}\]</p>
-<p><a id=org517cd1a></a></p>
+<p><a id=org3c29bbd></a></p>
 <p>\[a^{(k)}_{R_i} * a^{(k)}_{L_i} = 0, \forall i = 1, \cdots, n, \forall k = 1, \cdots, m \text{ (eqn:14)}\]</p>
-<p>Note when we concatenate all the binary representation of \(\overrightarrow{a^{(k)}_{L}}\) (resp. \(\overrightarrow{a^{(k)}_{R}}\)) into \(\overrightarrow{a_{L}}\) (resp. \(\overrightarrow{a_{R}}\)), we can condense <a href=#org8dafa42>1</a> (resp. <a href=#org517cd1a>1</a>) into the <a href=#orgd6b4995>1</a> (resp. <a href=#orga2352a9>1</a>). We use the same trick as before to compress equations in <a href=#orgd7a266c>1</a>, then we have
+<p>Note when we concatenate all the binary representation of \(\overrightarrow{a^{(k)}_{L}}\) (resp. \(\overrightarrow{a^{(k)}_{R}}\)) into \(\overrightarrow{a_{L}}\) (resp. \(\overrightarrow{a_{R}}\)), we can condense <a href=#org60124f3>1</a> (resp. <a href=#org3c29bbd>1</a>) into the <a href=#orgcdcc766>1</a> (resp. <a href=#org95663fd>1</a>). We use the same trick as before to compress equations in <a href=#org421a96f>1</a>, then we have
 \[(\overrightarrow{a_L} - \overrightarrow{1_{mn}} - \overrightarrow{a_R}) \cdot \overrightarrow{y_{mn}} + \overrightarrow{a_L}\cdot (\overrightarrow{a_R} \circ \overrightarrow{y_{mn}}) * z + \sum_k(a^{(k)} - \overrightarrow{a^{(k)}_{L}} \cdot \overrightarrow{2_n}) * z^{2+k} = 0\]</p>
-<p>Accordingly, we adjust terms in <a href=#org48f6213>1</a>, <a href=#org6e82c7f>1</a> and <a href=#orgae41668>1</a>. After that, we can verify the proof in the same way. Now we have got rid of all the roadblocks. A zero-knowledge confidential transaction scheme is here to stay.</p>
+<p>Accordingly, we adjust terms in <a href=#org3265368>1</a>, <a href=#org9e7e1e3>1</a> and <a href=#orgc36fdad>1</a>. After that, we can verify the proof in the same way. Now we have got rid of all the roadblocks. A zero-knowledge confidential transaction scheme is here to stay.</p>
 </div>
 </div>
 </div>
