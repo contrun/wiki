@@ -1,0 +1,74 @@
+digraph G {
+  graph [fontname = "Handlee"];
+  node [fontname = "Handlee"];
+  edge [fontname = "Handlee"];
+
+  bgcolor=transparent;
+
+
+  client -> split_dns;
+  split_dns -> a0 [label="coredns mDNS"];
+  split_dns -> b0 [label="Normal DNS"];
+  a0 -> aio_proxy [label="direct connnection"];
+  a0 -> aio_proxy [label="UPNP/NAT-PMP"];
+  a0 -> aio_proxy [label="UDP hole-punching"];
+  a0 -> relay_servers;
+  relay_servers -> aio_proxy;
+  b0 -> PROXY;
+  PROXY -> sni;
+  sni -> a0 [label="LLMNR/mDNS"];
+
+  aio_proxy -> aio_proxy_unwrapped;
+  aio_proxy_unwrapped -> peek_packet_header;
+  peek_packet_header -> ssh_server [label="OpenSSH"];
+  peek_packet_header -> traefik [label="HTTP/TLS"];
+  peek_packet_header -> other_tcp_udp_services [label="other protocols"];
+  other_tcp_udp_services -> client;
+  
+  traefik -> authelia [label="authorization request"];
+  traefik -> authorized [label="public service"]
+  authelia -> authorized [label="authorized"];
+  authelia -> client [label="403 unauthorized\nor\n302 redirect to login page"];
+  authorized -> kube_proxy [label="k8s ingress"];
+  authorized -> hostname;
+  hostname -> request_path [label="wstunnel"];
+  hostname -> docker_services [label="dynamic docker hostnames"];
+  hostname -> other_services [label="other hostnames"];
+  docker_services -> docker_container;
+  docker_container -> client;
+  request_path -> ssh_server [label="ssh"];
+  request_path -> other_tcp_udp_services [label="other paths"];
+  
+  kube_proxy -> traefik_ingress;
+  traefik_ingress -> sidecar;
+  traefik_ingress -> kubernetes_backend_services;
+  sidecar -> kubernetes_backend_services;
+  kubernetes_backend_services -> client;
+
+  client [label="client", shape=Diamond];
+  split_dns [label="split dns", shape=Mdiamond]
+  a0 [label="overlay network (tailscale/zerotier)"];
+  peek_packet_header [label="peek packet header"];
+  b0 [label="public accessible servers"];
+  relay_servers [label="relay servers"];
+  aio_proxy [label="aio proxy"];
+  ssh_server [label="ssh server", shape=Diamond];
+  authelia [label="authelia middleware"]
+  other_services [label="other HTTP services"];
+  docker_services [label="docker"];
+  docker_container [label="container", shape=Diamond];
+  sni [label="route based on SNI"];
+  PROXY [label="prepend PROXY protocol"];
+  authorized [label="traefik"]
+  aio_proxy_unwrapped [label="unwrap PROXY protocol"];
+  hostname [shape=Mdiamond];
+  request_path [label="request path"];
+  traefik_ingress [label="traefik ingress controller"];
+  request_path [shape=Mdiamond];
+  authelia [shape=Mdiamond];
+  peek_packet_header [shape=Mdiamond];
+  other_tcp_udp_services [label="other TCP/UDP services", shape=Diamond];
+  kubernetes_backend_services [label="kubernetes services", shape=Diamond];
+  ssh_server -> client;
+  other_services -> client;
+}

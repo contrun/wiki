@@ -11,6 +11,8 @@ To multiplexing protocols with a single port, I use [[https://github.com/contrun
 I use [[https://github.com/features/actions][github actions]], [[https://www.vaultproject.io/][hashicorp vault]], [[https://github.com/serokell/deploy-rs][depoly-rs]] and [[https://www.cachix.org/][cachix]]. I use the grafana stack ([[https://prometheus.io/][prometheus]], [[https://prometheus.io/docs/alerting/latest/alertmanager/][AlertManager]], [[https://grafana.com/][grafana]] and [[https://grafana.com/oss/loki/][loki]])
 for observablility.
 
+* Life of a Request
+[[file:assets/images/life-of-a-request.svg]]
 
 * Principles
 My principles can be best described as [[https://github.com/cncf/toc/blob/main/DEFINITION.md][cloud nativeness]]. Cloud-native is an all-encompassing and vague term.
@@ -70,7 +72,7 @@ This means that the backend service does not need to know there is a middle man 
 In particular, it means that the origin requester's address is preserved. Typical HTTP reverse proxies are not transparent.
 They pass the original requester's information by injecting an ~X-Forwarded-For~ header.
 **** Protocol Multiplexing
-L4 protocol multiplexing means that we can use the same TCP port for HTTP, TlS and SSH. An example is [[https://github.com/yrutschle/sslh][sslh]].
+L4 protocol multiplexing means that we can use the same TCP port for HTTP, TLS and SSH. An example is [[https://github.com/yrutschle/sslh][sslh]].
 It normally works by peeking into a few first bytes and determine which
 protocol this packet is, and then handing off the connection to another application which is listening on some other port.
 **** Configuration Complexity
@@ -153,7 +155,7 @@ The easiest and the most abominable solution. The downsides are
 + no wildcard support for [[https://superuser.com/questions/135595/using-wildcards-in-names-in-windows-hosts-file][Windows]], [[https://stackoverflow.com/questions/20446930/how-to-put-wildcard-entry-into-etc-hosts][Linux]]
 + no flexibility. You can not graceful fallback to another host or easily add another entry
 *** Nsswitch
-If you ever use mdns, you may wonder how ~abc.local~ resolve to the host ~abc~. The secret sauce lies in
+If you ever use mdns, you may wonder how is ~abc.local~ resolved to the host ~abc~. The secret sauce lies in
 the following stanza of ~/etc/nsswitch.conf~.
 #+begin_src
 hosts:     files mdns_minimal [NOTFOUND=return] mymachines resolve [!UNAVAIL=return] dns mdns myhostname
@@ -163,7 +165,7 @@ They provide the functionality of resolving mdns hosts and machinectl hosts. The
 write another plugin for nsswitch like ~mdns_minimal~, but nsswitch is also an abomination.
 It is glibc only, thus musl-linked and statically linked binaries would fail.
 As a matter of fact, [[https://wiki.musl-libc.org/future-ideas.html][supporting mdns on musl is a future idea]], while [[https://github.com/golang/go/issues/10485][golang fallbacks to glibc to resolve hostname]] when
-the hosts entry in nsswitch is too conflicted. So it does not worth the effort to fiddle with nsswitch.
+the hosts entry in nsswitch is too complicated. So it does not worth the effort to fiddle with nsswitch.
 *** Coredns
 I found salvation in coredns. Here is how I resolve a domain name with coredns enriched by [[https://github.com/openshift/coredns-mdns][coredns-mdns]] and [[https://github.com/coredns/alternate][coredns-alternate]].
 The source code to this coredns instance is [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/coredns/main.go][here]].
@@ -194,7 +196,7 @@ to use this DNS server. I haven't done it yet.
 *** Multicasting
 [[https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution][LLMNR]] and [[https://en.wikipedia.org/wiki/Multicast_DNS][mDNS]] can be leveraged to resolve hosts, if your VPN support multicasting
 (which zerotier supports, while tailscale doesn't support yet). The downside is that,
-most resolvers only supports single lable for LLMNR, and `.local` postfix is required for mDNS.
+most resolvers only support single label for LLMNR, and `.local` postfix is required for mDNS.
 So you can not easily resolve usual domain like `test.example.com` to host `test`.
 The solution is to use coredns as described above.
 
@@ -209,7 +211,7 @@ Currently, TLS is terminated by traefik using above certificates.
 Given TLS termination is not handled by the edge routers, we can only do intelligent routing based [[https://en.wikipedia.org/wiki/Server_Name_Indication][SNI]].
 As far as I can tell, [[https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/sni_dynamic_forward_proxy_filter][SNI dynamic forward proxy]] of envoy relies heavily on the DNS server to find out
 which backend server to forward traffic. This is less than ideal in my use case, because with the help of systemd-resolved's LLMNR support
-(mDNS must be manually enabled for each interfaces, LLMNR seems to be easier to use), I can use easily resolve hostnames.
+(mDNS must be manually enabled for each interface, LLMNR seems to be easier to use), I can use easily resolve hostnames.
 All I need is obtaining a new hostname from the original hostname by a simple regex. I choose nginx over envoy to do that.
 Here is my nginx configuration.
 #+begin_src
@@ -274,7 +276,7 @@ With this configuration, nginx can both forward http and https traffic based on 
 ~$my_hostname~ here is resolved by systemd-resolved.
 I also added some aliases to simplify management of domain name prefixes which do not have a backing hostname.
 This is needed as I find no easy way to add an alias to an existing domain (c.f. [[https://github.com/systemd/systemd/issues/11976][this issue]]).
-Also I didn't find any good LLMNR responder with customizable aliases.
+Besides, I didn't find any good LLMNR responder with customizable aliases.
 Note this is particularly easy to manage as nginx need not know its serving domain.
 I can add more edge proxies as needed. They work the same way. I can also add more backend servers as needed.
 All they need to respond to LLMNR requests.
@@ -357,7 +359,7 @@ See routing.
 As much as I love NixOS, I don't use nix for everything. Nix does not work along with some technologies.
 I use ansible for two purposes, first setting up cloud resources (like setting up [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/site.yaml#L19-L41][tailscale]] and [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/site.yaml#L43-L84][envoy]]), second managing Kubernetes.
 Kubernetes is declarative, but using command line to manage Kubernetes is imperative. I use [[https://docs.ansible.com/ansible/latest/collections/community/kubernetes/][community.kubernetes]].
-A pleasant side effect of using ansible to manage Kubernetes is what I did and what I need to do are well-documented.
+One pleasant side effect of using ansible to manage Kubernetes is what I did and what I need to do are well-documented.
 
 ** Kubernetes
 My Kubernetes distribution is k3s (provisioned by nix). Each Kubernetes cluster includes exactly one node for the time being.
@@ -369,14 +371,13 @@ Using Kubernetes is much preferable.
 ** Authentication and Authorization
 *** Setup
 I use [[https://github.com/authelia/authelia][authelia]] for authentication and authorization. I [[https://github.com/contrun/dotfiles/blob/75d7a0c803f763996f77bfe570c9369b9d32910a/ignored/nix/common.nix#L1619][created]] an [[https://doc.traefik.io/traefik/middlewares/forwardauth/][ForwardAuth]] middleware for traefik, which works like nginx [[http://nginx.org/en/docs/http/ngx_http_auth_request_module.html][auth_request]].
-Upon receiving a client request, depending on the routing, traefik may initiate a subrequest to authelia possibly with necessary client crendentials,
+Upon receiving a client request, depending on the routing, traefik may initiate a subrequest to authelia possibly with necessary client credentials,
 if authelia is able to authenticate the user and authorize the request, the client request will be forwarded
 to the backend service with some extra headers containing client user information.
 There is not such thing as authorization yet. It's only me using my services.
 *** Weakness
 Authelia is not satisfactory in many aspects. First, its policy engine is not flexible enough. Second, it requires a lot of boilerplate in
-the configuration, e.g. I need to specify many hard-coded base domain ~hostname-a.mydomain.tld~ instead of ~hostname-a~. This is not desirable as I have many different postfixes,
-and the configuration is shared.
+the configuration, e.g. I need to specify many hard-coded base domain ~hostname-a.mydomain.tld~ instead of ~hostname-a~. This is not desirable as I have many postfixes, and the configuration is shared.
 *** Strength
 What I really like about authelia is its simplicity and easy integration with traefik.
 *** Future
@@ -394,7 +395,7 @@ There ain't such thing as intrusion detection system yet. Setting up fail2ban is
 * Backup
 ** syncoid
 I use [[https://github.com/jimsalterjrs/sanoid/][syncoid]] for on-site backup. Syncoid is basically a
-`zfs send | zfs receive` wrapper. With naive `rsync -avzh --process`, I can easily encounter database conruption. Thanks to Zfs' hard work, I don't have to worry about this consistency.
+~zfs send | zfs receive~ wrapper. With naive ~rsync -avzh --process~, I can easily encounter database corruption. Thanks to Zfs's hard work, I don't have to worry about this consistency.
 Syncoid also works incrementally. Another advantage of this method is that I can easily restore an entire zpool. But it requires a lot of free space, and it may take a while to finish.
 I attached an external disk to my main computer.
 
@@ -430,19 +431,21 @@ Here is my nix configuration.
     };
 #+end_src
 I back up my data every day to two backend storage.
-For some files, I need to manually tune the back-up process. For example, to back up postgresql database,
+For some files, I need to manually tune the backup process. For example, to back up postgresql database,
 I need to run pg_dump first. This may lock the whole table.
 
 * Observablility
 I use grafana, loki, prometheus for observablility. I can't praise enough this squad for its simplicity to set up.
 I basically just set up the components separately. They just work. Also, it is a share-nothing architecture, so
-in order to acheive high availbility, all I need to do is add a new remote write target. For that, I use [[https://grafana.com/products/cloud/][grafana cloud]].
+in order to achieve high availability, all I need to do is add a new remote write target. For that, I use [[https://grafana.com/products/cloud/][grafana cloud]].
 
 ** Metrics
 Prometheus is pull based. It is quite easy to obtain nodes data from node exporter. Besides, almost all services now expose prometheus metrics.
+I enabled [[https://github.com/contrun/infra/blob/e0141e8d5c8caa54ea9e4dfd5de143928e9f4836/nix/common.nix#L1298-L1516][quite a few prometheus exporters (e.g. systemd, node, postgresql)]], whose data are sent both to my local machine and grafana cloud.
 
 ** Logs
-Loki lives up to its promise -- like prometheus, for logs. It is harder for loki to search things, but it is tolerable for me.
+Loki lives up to its promise -- like prometheus, for logs. The data are collected by promtail and sent to my local machine and grafana cloud.
+Most of my logs are stored with systemd-journal. It is quite easy to [[https://github.com/contrun/infra/blob/e0141e8d5c8caa54ea9e4dfd5de143928e9f4836/nix/common.nix#L1518-L1626][collect them with promtail]].
 
 ** Visualization
 Grafana.
@@ -454,21 +457,21 @@ Alert manager.
 ** Worker
 Github is quite generous for the offer of github actions. The free machines' performance is quite good.
 It is no wonder that there are many [[https://github.blog/2021-04-22-github-actions-update-helping-maintainers-combat-bad-actors/][miners trying to abuse them]]. As good as github actions, there are two nuisances for my usage.
-+ disk size. The closure size of my toplevel system profile easily exceeds the size limit. I need to [[https://github.com/contrun/infra/blob/01478dd058f9b273644c8800dcd1bc2bf36408a7/.github/workflows/nix.yml#L104-L156][clean up some packages]] to get more free disk space.
++ disk size. The closure size of my top level system profile easily exceeds the size limit. I need to [[https://github.com/contrun/infra/blob/01478dd058f9b273644c8800dcd1bc2bf36408a7/.github/workflows/nix.yml#L104-L156][clean up some packages]] to get more free disk space.
 Some of my machines' profile can be as large as 70G. There is no way for github actions to build a profile that large.
 + running time limit. Nix channel updates can invaildate many binary caches. I need to build so many packages that github actions workflow frequently times out.
-I need to manually rerun it. I have to cache my build artifacts with cachix.
+I need to manually rerun it, and cache my build artifacts with cachix.
 
 ** Artifacts store
 [[https://r13y.com/][Most of nix's builds are reproducible]]. The nix derivation output path depends on the hashes of the build inputs. Given the same inputs, we can easily
-check if there are valid binary cache for the output. I use [[https://www.cachix.org/][cachix]] to cache my builds. Think cachix as a docker container registry.
-It is quite straightforward to use [[https://github.com/cachix/cachix-action][cachix action]]. I also setting up cachix in my local machines, so that I can use the building results of github actions worker.
+check if there are valid binary caches for the output. I use [[https://www.cachix.org/][cachix]] to cache my builds. Think cachix as a docker container registry.
+It is quite straightforward to use [[https://github.com/cachix/cachix-action][cachix action]]. I also set up cachix in my local machines, so that I can use the building results of github actions worker.
 It greatly reduces the building time on my local machines.
 
 ** Deployment
 I use [[https://github.com/serokell/deploy-rs][deploy-rs]] to deploy my nixos configuration to the target machine. deploy-rs reads my ~flake.nix~, builds the profile on the machine running deploy-rs command.
-It then copies the profile to target machine via ssh. Depending on my configuration, it may choose to download binary caches from subsitutes firstly
-(thus reduces time by avoid possible slow ssh connection). It should be noted that deploy build the profile on local machine. This is important for me as
+It then copies the profile to target machine via ssh. Depending on my configuration, it may choose to download binary caches from substitutes firstly
+(thus reduces time by avoid possible slow ssh connection). It should be noted that deploy-rs build the profile on local machine. This is important for me as
 many of my machines are not powerful enough to build a profile quickly. deploy-rs also has elementary sanity check, e.g. automatically rollback to previous
 generation of profile if ssh connection didn't come back after switch to the new profile.
 The only remaining complication is ssh connectivity.
@@ -476,15 +479,15 @@ The only remaining complication is ssh connectivity.
 ** Node Connectivity
 To establish connectivity from github actions runner to my server, I use [[https://github.com/erebe/wstunnel][wstunnel]]. Well, this time I use port-mapping solution.
 Note that wstunnel dig tunnels over websocket. And I have described a lot about how I can access my services over http above.
-So this is quite a no-brainer for me to set up a tunnel. All I need to do is running wstunnel in server mode, set up a routing for it, and then
-~ssh -o ProxyCommand="wstunnel --upgradePathPrefix=some-superb-secret-path -L stdio:%h:%p wss://wstunnel.example.com" hub.localhost~
-I kept the routing path ~some-superb-secret-path~ secret so that it would be impossible for other people to arbitrarily establish a tunnel to my machine.
+So it is quite a no-brainer for me to set up a tunnel. All I need to do is running wstunnel in server mode, set up a routing rule for it, and then
+~ssh -o ProxyCommand="wstunnel --upgradePathPrefix=some-superb-secret-path -L stdio:%h:%p wss://wstunnel.example.com" remote-machine~
+I keep the routing path ~some-superb-secret-path~ secret so that it would be impossible for other people to establish a tunnel to my machine.
 
 ** Secrets management
 One more thing, how to make github actions runner's ssh connection to my machines more secure. I fully agree the sentimental of [[https://smallstep.com/blog/use-ssh-certificates/][this article]].
 We should use ssh certificates as more as possible. The question is now how to securely use ssh certificates. I need a system to automatically issue short-lived
 certificates. This system must be fully programmable. [[https://smallstep.com/certificates/][Smallstep certificates]] is not good in terms of programmability. I use [[https://www.vaultproject.io/docs/secrets/ssh][Hashicorp Vault ssh secret engine]] for this.
-[[https://github.com/contrun/infra/commit/63f4456757cb082279e83ae0e4ec1a0ded6ec227][Here]] is how I use valut to issue short-lived ssh certificates.
+[[https://github.com/contrun/infra/commit/63f4456757cb082279e83ae0e4ec1a0ded6ec227][Here]] is how I use vault to issue short-lived ssh certificates.
 
 * Proxy
 It is a mandate to use a proxy on my machines, as too many websites are blocked in China. I can't tolerate my wallabag instance is unable to access articles on Wikipedia.
@@ -525,8 +528,17 @@ Oh, dear god, iptables is hard. I wish there is an easier way to transparent pro
 
 * Server Management
 ** wstunnel
+Adding the following to my ssh config,
+#+begin_src
+Host wstunnel.*
+    CheckHostIP no
+    ProxyCommand wstunnel --upgradePathPrefix=some-superb-secret-path -L stdio:$(echo %h | cut -d. -f2):%p wss://%h.example.com
+#+end_src
+I am now road warrior who can access my servers anytime anywhere.
 ** ttyd
+[[https://tsl0922.github.io/ttyd/][ttyd]] is a web based terminal. I added a route for ttyd, then I can manage my servers through a web browser.
 ** aioproxy
+As stated above, aioproxy can multiplex ssh and https on the same port. I only need to open one port in my vps.
 
 * Next Step
 ** Kubernetes after All?
@@ -544,6 +556,5 @@ I hope it lives up to its promise. Also, [[https://mrkaran.dev/posts/home-server
 Nix is great. But it is hard for outside world to learn my nix configuration.
 ** Security Hardening
 ** Federated Storage
-** Grand Unification
 ** Personal Data Warehouse
 ** Accounts (ldap)
