@@ -33,15 +33,15 @@
 <!-- a0 -->
 <g id="node3" class="node">
 <title>a0</title>
-<ellipse fill="none" stroke="black" cx="318" cy="-949" rx="167.07" ry="18"/>
-<text text-anchor="middle" x="318" y="-945.3" font-family="Handlee" font-size="14.00">overlay network (tailscale/zerotier)</text>
+<ellipse fill="none" stroke="black" cx="321" cy="-949" rx="167.07" ry="18"/>
+<text text-anchor="middle" x="321" y="-945.3" font-family="Handlee" font-size="14.00">overlay network (tailscale/zerotier)</text>
 </g>
 <!-- split_dns&#45;&gt;a0 -->
 <g id="edge2" class="edge">
 <title>split_dns&#45;&gt;a0</title>
-<path fill="none" stroke="black" d="M481.94,-1262.03C411.89,-1251.1 281,-1225.05 281,-1183 281,-1183 281,-1183 281,-1035 281,-1013.88 290.72,-992.07 300.2,-975.84"/>
-<polygon fill="black" stroke="black" points="303.4,-977.31 305.68,-966.97 297.45,-973.64 303.4,-977.31"/>
-<text text-anchor="middle" x="335" y="-1105.3" font-family="Handlee" font-size="14.00">coreddns mdns</text>
+<path fill="none" stroke="black" d="M482.82,-1261.87C414.21,-1250.69 286,-1224.29 286,-1183 286,-1183 286,-1183 286,-1035 286,-1014.06 295.2,-992.25 304.16,-975.96"/>
+<polygon fill="black" stroke="black" points="307.34,-977.47 309.35,-967.06 301.29,-973.94 307.34,-977.47"/>
+<text text-anchor="middle" x="337.5" y="-1105.3" font-family="Handlee" font-size="14.00">coredns mDNS</text>
 </g>
 <!-- b0 -->
 <g id="node4" class="node">
@@ -65,21 +65,21 @@
 <!-- a0&#45;&gt;aio_proxy -->
 <g id="edge4" class="edge">
 <title>a0&#45;&gt;aio_proxy</title>
-<path fill="none" stroke="black" d="M326.43,-930.82C335.32,-911.64 348.76,-879.45 354,-850 356.8,-834.25 355.46,-829.93 354,-814 353.19,-805.23 351.67,-795.75 350.04,-787.22"/>
+<path fill="none" stroke="black" d="M328.73,-930.74C336.89,-911.49 349.21,-879.23 354,-850 356.59,-834.21 355.46,-829.93 354,-814 353.19,-805.23 351.67,-795.75 350.04,-787.22"/>
 <polygon fill="black" stroke="black" points="353.47,-786.51 348.06,-777.4 346.61,-787.89 353.47,-786.51"/>
 <text text-anchor="middle" x="420.5" y="-828.3" font-family="Handlee" font-size="14.00">direct connnection</text>
 </g>
 <!-- a0&#45;&gt;aio_proxy -->
 <g id="edge5" class="edge">
 <title>a0&#45;&gt;aio_proxy</title>
-<path fill="none" stroke="black" d="M375.04,-932.02C414.69,-917.59 464.64,-892.04 489,-850 497.02,-836.16 498.13,-827.14 489,-814 469.78,-786.33 434.58,-772.81 403.68,-766.22"/>
+<path fill="none" stroke="black" d="M376.66,-931.9C415.69,-917.36 465.03,-891.72 489,-850 496.97,-836.13 498.13,-827.14 489,-814 469.78,-786.33 434.58,-772.81 403.68,-766.22"/>
 <polygon fill="black" stroke="black" points="404.31,-762.77 393.83,-764.31 402.98,-769.65 404.31,-762.77"/>
 <text text-anchor="middle" x="547.5" y="-828.3" font-family="Handlee" font-size="14.00">UPNP/NAT&#45;PMP</text>
 </g>
 <!-- a0&#45;&gt;aio_proxy -->
 <g id="edge6" class="edge">
 <title>a0&#45;&gt;aio_proxy</title>
-<path fill="none" stroke="black" d="M226.49,-933.92C133.08,-915.7 8.78,-878.38 62,-814 89.41,-780.84 208.09,-767.85 282.48,-762.9"/>
+<path fill="none" stroke="black" d="M227.62,-933.98C133.25,-915.89 8.45,-878.77 62,-814 89.41,-780.84 208.09,-767.85 282.48,-762.9"/>
 <polygon fill="black" stroke="black" points="282.91,-766.38 292.67,-762.25 282.47,-759.39 282.91,-766.38"/>
 <text text-anchor="middle" x="129" y="-828.3" font-family="Handlee" font-size="14.00">UDP hole&#45;punching</text>
 </g>
@@ -92,8 +92,8 @@
 <!-- a0&#45;&gt;relay_servers -->
 <g id="edge7" class="edge">
 <title>a0&#45;&gt;relay_servers</title>
-<path fill="none" stroke="black" d="M311.47,-930.53C304.45,-911.77 293.21,-881.7 285.06,-859.91"/>
-<polygon fill="black" stroke="black" points="288.23,-858.39 281.45,-850.25 281.68,-860.85 288.23,-858.39"/>
+<path fill="none" stroke="black" d="M314.01,-930.53C306.47,-911.68 294.37,-881.43 285.64,-859.61"/>
+<polygon fill="black" stroke="black" points="288.87,-858.24 281.9,-850.25 282.37,-860.84 288.87,-858.24"/>
 </g>
 <!-- PROXY -->
 <g id="node7" class="node">
@@ -128,21 +128,21 @@
 <!-- sni -->
 <g id="node8" class="node">
 <title>sni</title>
-<ellipse fill="none" stroke="black" cx="466" cy="-1036" rx="96.68" ry="18"/>
-<text text-anchor="middle" x="466" y="-1032.3" font-family="Handlee" font-size="14.00">route based on SNI</text>
+<ellipse fill="none" stroke="black" cx="469" cy="-1036" rx="96.68" ry="18"/>
+<text text-anchor="middle" x="469" y="-1032.3" font-family="Handlee" font-size="14.00">route based on SNI</text>
 </g>
 <!-- PROXY&#45;&gt;sni -->
 <g id="edge10" class="edge">
 <title>PROXY&#45;&gt;sni</title>
-<path fill="none" stroke="black" d="M512.23,-1090.81C504.74,-1082.09 495.5,-1071.34 487.26,-1061.75"/>
-<polygon fill="black" stroke="black" points="489.8,-1059.33 480.63,-1054.03 484.49,-1063.89 489.8,-1059.33"/>
+<path fill="none" stroke="black" d="M512.96,-1090.81C505.91,-1082.18 497.23,-1071.56 489.45,-1062.03"/>
+<polygon fill="black" stroke="black" points="491.95,-1059.56 482.91,-1054.03 486.53,-1063.99 491.95,-1059.56"/>
 </g>
 <!-- sni&#45;&gt;a0 -->
 <g id="edge11" class="edge">
 <title>sni&#45;&gt;a0</title>
-<path fill="none" stroke="black" d="M437.46,-1018.61C414.35,-1005.33 381.57,-986.51 356.19,-971.93"/>
-<polygon fill="black" stroke="black" points="357.62,-968.72 347.21,-966.77 354.14,-974.79 357.62,-968.72"/>
-<text text-anchor="middle" x="449" y="-988.8" font-family="Handlee" font-size="14.00">LLMNR/mDNS</text>
+<path fill="none" stroke="black" d="M440.46,-1018.61C417.35,-1005.33 384.57,-986.51 359.19,-971.93"/>
+<polygon fill="black" stroke="black" points="360.62,-968.72 350.21,-966.77 357.14,-974.79 360.62,-968.72"/>
+<text text-anchor="middle" x="452" y="-988.8" font-family="Handlee" font-size="14.00">LLMNR/mDNS</text>
 </g>
 <!-- peek_packet_header -->
 <g id="node10" class="node">
@@ -189,8 +189,8 @@
 <!-- other_tcp_udp_services -->
 <g id="node13" class="node">
 <title>other_tcp_udp_services</title>
-<polygon fill="none" stroke="black" points="555.5,-109 382.5,-109 382.5,-73 555.5,-73 555.5,-109"/>
-<text text-anchor="middle" x="469" y="-87.3" font-family="Handlee" font-size="14.00">other tcp/udp services</text>
+<polygon fill="none" stroke="black" points="558.5,-109 379.5,-109 379.5,-73 558.5,-73 558.5,-109"/>
+<text text-anchor="middle" x="469" y="-87.3" font-family="Handlee" font-size="14.00">other TCP/UDP services</text>
 </g>
 <!-- peek_packet_header&#45;&gt;other_tcp_udp_services -->
 <g id="edge16" class="edge">
@@ -238,7 +238,7 @@
 <!-- other_tcp_udp_services&#45;&gt;client -->
 <g id="edge17" class="edge">
 <title>other_tcp_udp_services&#45;&gt;client</title>
-<path fill="none" stroke="black" d="M555.55,-93.13C666.98,-96.63 851.39,-110.04 894,-160 961.92,-239.65 872,-289.82 872,-394.5 872,-1270 872,-1270 872,-1270 872,-1284.35 872,-1300.33 872,-1313.49"/>
+<path fill="none" stroke="black" d="M558.9,-93.24C670.64,-96.9 851.82,-110.53 894,-160 961.92,-239.65 872,-289.82 872,-394.5 872,-1270 872,-1270 872,-1270 872,-1284.35 872,-1300.33 872,-1313.49"/>
 <polygon fill="black" stroke="black" points="868.5,-1313.78 872,-1323.78 875.5,-1313.78 868.5,-1313.78"/>
 </g>
 <!-- authelia&#45;&gt;client -->
