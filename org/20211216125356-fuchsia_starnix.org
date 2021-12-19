@@ -1,0 +1,356 @@
+:PROPERTIES:
+:ID:       2746a3a7-22b2-4e8f-a547-58adec131c70
+:END:
+#+title: fuchsia starnix
+#+filetags: :emulator:ptrace:debugging:kernel:zircon:starnix:wsl:fuchsia:
+
+[[https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/src/proc/bin/starnix][~Starnix~]] is the code name of a ~Fuchsia~ project which proposes to run unmodified Linux programs.
+This is my take to understand what is needed to do in order for ~Fuchsia~ to run Linux programs,
+and how Linux run programs itself. The main reference is [[https://fuchsia.dev/fuchsia-src/contribute/governance/rfcs/0082_starnix][RFC 0082 from ~Fuchsia~]],
+from which you definitely will benefit more.
+
+* A Tale of two alternatives
+So, you want to run unmodified Linux programs in ~Fuchsia~. You have two choices.
+
++ Creating a virtual machine which is able to emulate instructions of the binary you want to run on Linux
++ Mimicking Linux only when crossing the system boundary and running other instructions unmodified on the host
+
+Coincidentally, the first approach is what WSL 1 takes, and the second approach is what WSL 2 takes.
+The first one is an easy choice if you don't need tight system integration.
+You don't need to differentiate the guest kernel and the applications running on the guest kernel.
+You know, virtualization is a mature field. All you need to do is port the virtual machine monitor (hypervisor).
+After that, The case is settled for good.
+
+The second way has more stringent requirements. First, you will need the same ISA for the Linux program and the host machine.
+Second, you need to implement a ton of system interfaces (system calls, or API through system libraries like win32 API).
+If the upstream syscall interface changed, you need to
+keep up to date. Third, not only there are many syscalls to port, but also there are many unnamed conventions the Linux binaries
+expect the running host to satisfy. To name a few, ELF loader, dynamic interpreter, System V interface for process initialization,
+POSIX API, stdin and stdout conventions, and so on.
+
+To summarize, it is a great price to pay for tight integration. So why ~fuchsia~ choose to implement this?
+And how does ~fuchsia~ implement the POSIX interface. I am not able to answer the first question.
+As for the second one, follow me patiently.
+
+* A detour through how debugger works
+
+Ever wonder how a debugger can stop the expectation of a debuggee and inspect the running status of the debuggee,
+and even change its control flow?
+
+Here is the pseudocode of a Windows debugger. It is copied from [[https://www.microsoftpressstore.com/articles/article.aspx?p=2201303][How Windows Debuggers Work]].
+
+#+begin_src C++
+// Main User-Mode Debugger Loop //
+CreateProcess("target.exe",..., DEBUG_PROCESS, ...);
+while (1)
+{
+    WaitForDebugEvent(&event, ...);
+    switch (event)
+    {
+        case ModuleLoad:
+            Handle/Ignore;
+            break;
+        case TerminateProcess:
+            Handle/Ignore;
+            break;
+        case Exception (code breakpoint, single step, etc...):
+            Handle/Ignore;
+            break;
+    }
+    ContinueDebugEvent(...);
+}
+#+end_src
+
+The debugger first creates a new process with the flag ~DEBUG_PROCESS~.
+With this on, the operating system will track the running status of the spawned process,
+and the debugger process is given special privilege over its child process.
+Whenever there is some notable event, the OS returns necessary data to the debugger process
+from ~WaitForDebugEvent~.
+
+The debugger can then do whatever it needs to facilitate debugging. For instance,
+it can not only read the memory pages of the debuggee,
+but also change the control flow, e.g. jump to another address and execute the instruction there.
+
+* Syscalls and how to emulate them in userspace
+The moral of the above story is that the operating system normally provides a way for one process to
+trace and modify the running status of another process. If we can "arbitrarily" modify the control flow
+of sub processes, we may be able to run foreign binaries.
+
+** System Calls
+Ultimately, the programs running on an OS interferes with the OS by syscalls (some through an indirection a system library, e.g. ~Fuchsia~
+uses [[https://en.wikipedia.org/wiki/VDSO][vDSO]], [[https://lwn.net/Articles/806776/][openbsd uses system libc]]).
+
+Take read a file as an example, this ultimately attributes to three syscalls,
++ Userspace program proposes to open a file in the specified path, the kernel returns a file handle in the form of file descriptor.
++ userspace program continues on by reading the file descriptor. The kernel writes the data it read from block devices, and then
+write the bytes to the location the userspace program specified.
++ When the userspace program is done, it proposes to close the file descriptor. The kernel releases the related resources.
+
+All the hardware resources is managed and utilized this way. The kernel provides a unified abstraction, the userspace programs
+utilizes this abstraction through the convention of syscalls.
+
+** How to make a syscall manually
+See [[https://lwn.net/Articles/604287/][Anatomy of a system call, part 1]], [[https://lwn.net/Articles/604515/][Anatomy of a system call, part 2]] for details.
+
+The gist is that programs put the required arguments in the specified register. It then runs instruction [[https://stackoverflow.com/questions/1817577/what-does-int-0x80-mean-in-assembly-code][~int 0x80~]] to raise a soft interrupt.
+The CPU automatically dispatch this interruption to a registered interruption handler, which is a kernel-space procedure.
+The kernel space procedure then checks the syscall number and dispatches the call to a specialized handler.
+
+** How to intercept syscalls in Linux
+In Linux, we can easily trace the syscalls made by a program with ~strace~.
+~strace~ is able to print out all the syscalls a program has called and all the return code of those syscalls.
+
+You might have wondered how ~strace~ can have the ability to inspect syscalls. We need the blessing of Linux kernel to do such thing.
+In order to obtain such blessing, ~strace~ needs to, you might have guessed,
+make a syscall, [[https://linux.die.net/man/2/ptrace][~ptrace(2)~]]. ~ptrace(2)~ instructs the kernel to stop the execution of the program upon initializing a syscall.
+The tracer is then notified to take some actions. In the ~strace~ case, ~strace~ prints out the syscall arguments, and
+tells the kernel to continue executing ~syscalls~. Just after the kernel finishes the ~syscall~ logic and before returns the control to the tracee,
+the kernel tells the tracer the return code, thus you can see the syscall returning code with ~strace~.
+
+** How to hijack syscalls in Linux
+As we have mentioned, the kernel is able to let userspace programs hook into syscalls.
+In order to fully emulate syscalls, the userspace program only needs a few more privileges.
+For example, some syscalls need to write the result to the memory of the caller, an operation strictly forbidden in normal situation.
+The kernel needs to grant memory read and write permission to the tracing program. Fortunately, this is also doable with ~ptrace(2)~.
+Well, theoretically this is fantastic. Do we have any real world usage of user space syscalls dispatch? Yes.
+
+*** User-mode Linux
+[[file:assets/images/obama-awards-obama-a-medal.jpg]]
+
+User-mode Linux is an ancient poor man's virtualization on Linux. See [[https://www.usenix.org/conference/als-01/user-mode-linux][User-mode Linux paper]] and [[https://www.kernel.org/doc/html/latest/virt/uml/user_mode_linux_howto_v2.html][kernel documentation]] for details.
+
+*** gVisor
+A modern application is [[https://gvisor.dev/][gVisor]]. According to its [[https://gvisor.dev/docs/][official website documentation]],
+#+begin_quote
+gVisor is an application kernel, written in Go, that implements a substantial portion of the Linux system call interface. It provides an additional layer of isolation between running applications and the host operating system.
+#+end_quote
+
+Quite mouthful, isn't it? In gVisor environment, safe syscalls from the applications are passed to the underlying kernel,
+while dangerous ones are censored by a mediator component called [[https://github.com/google/gvisor/tree/master/pkg/sentry][Sentry]].
+Sentry passes the syscalls to the [[https://gvisor.dev/docs/architecture_guide/platforms/][Platform]], which emulates real syscalls. When the emulation is done, the results are
+delivered to user applications. In this way, gVisor provides greater isolation between applications, which is quite useful in container environment.
+
+** A new mechanism to dispatch syscalls
+[[https://www.kernel.org/doc/html/latest/admin-guide/syscall-user-dispatch.html][Syscall user dispatch]].
+
+* The starnix runner
+~Fuchsia~ already has the ability to run unmodified Linux binaries. See initial implementation [[https://fuchsia-review.googlesource.com/c/fuchsia/+/485746][here]].
+The basic idea is already presented. We need a hook mechanism in the kernel to run specific handler when some exceptional events happened.
+Those kinds of exceptional events are called [[https://fuchsia.dev/fuchsia-src/concepts/kernel/exceptions][exceptions in ~Fuchsia~]].
+
+#+begin_quote
+When a thread encounters a fault condition, for example a segfault, execution
+is paused and the thread enters exception handling. Handlers that have
+registered to receive these exceptions are notified and given a chance to
+inspect or correct the condition.
+#+end_quote
+
+We now dive into the details.
+
+** hooks in the kernel
+As a matter of fact, ~fuchsia~ (more precisely, zircon, ~fuchsia~'s kernel) provides system APIs through [[https://fuchsia.dev/fuchsia-src/concepts/kernel/vdso][vDSO]]
+(which is great for binary compatibility and updatability, see [[https://xuzhongxing.github.io/201806fuchsia.pdf][P20 of these slides]]).
+When you invoke normal Linux syscalls in ~Fuchsia~, exceptions are raised.
+[[https://cs.opensource.google/fuchsia/fuchsia/+/main:zircon/kernel/lib/syscalls/syscalls.cc;l=89-111;drc=2f0879afeb5e5fba949dc377dcfd8c5ed21d9d76][Here]] is how zircon handles syscalls.
+
+#+begin_src c++
+// Stamped out syscall veneer routine for every syscall. Try to maximize shared code by forcing
+// most of the setup and teardown code into non-inlined preamble and postamble code.
+template <typename T>
+inline syscall_result do_syscall(uint64_t syscall_num, uint64_t pc, bool (*valid_pc)(uintptr_t),
+                                 T make_call) {
+  // Call the shared preamble code
+  auto pre_ret = do_syscall_pre(syscall_num, pc);
+  const uintptr_t vdso_code_address = pre_ret.vdso_code_address;
+  ProcessDispatcher* current_process = pre_ret.current_process;
+
+  // Validate the user space program counter originated from the vdso at the proper location,
+  // otherwise call through to the invalid syscall handler
+  uint64_t ret;
+  if (unlikely(!valid_pc(pc - vdso_code_address))) {
+    ret = sys_invalid_syscall(syscall_num, pc, vdso_code_address);
+  } else {
+    // Per syscall inlined routine to marshall args appropriately
+    ret = make_call(current_process);
+  }
+
+  // Call through to the shared postamble code
+  return do_syscall_post(ret, syscall_num);
+}
+#+end_src
+
+The line ~ret = sys_invalid_syscall(syscall_num, pc, vdso_code_address)~ saves the original syscall number, raises an exception.
+Then the kernel would suspend current thread and notify the registered exception handler.
+
+** handlers in the userspace
+[[https://cs.opensource.google/fuchsia/fuchsia/+/main:src/proc/bin/starnix/runner.rs;l=69-152;drc=5744210c57bc34495941363f6ae1b7423483fe0b][Here]] is the code snippet copied from ~fuchsia~'s ~starnix~ runner.
+
+#+begin_src rust
+/// Runs the given task.
+///
+/// The task is expected to already have been started. This function listens to
+/// the exception channel for the process (`exceptions`) and handles each
+///  exception by:
+///
+///   - verifying that the exception represents a `ZX_EXCP_POLICY_CODE_BAD_SYSCALL`
+///   - reading the thread's registers
+///   - executing the appropriate syscall
+///   - setting the thread's registers to their post-syscall values
+///   - setting the exception state to `ZX_EXCEPTION_STATE_HANDLED`
+///
+/// Once this function has completed, the process' exit code (if one is available) can be read from
+/// `process_context.exit_code`.
+fn run_task(mut current_task: CurrentTask, exceptions: zx::Channel) -> Result<i32, Error> {
+    let mut buffer = zx::MessageBuf::new();
+    loop {
+        read_channel_sync(&exceptions, &mut buffer)?;
+
+        let info = as_exception_info(&buffer);
+        assert!(buffer.n_handles() == 1);
+        let exception = zx::Exception::from(buffer.take_handle(0).unwrap());
+
+        if info.type_ != ZX_EXCP_POLICY_ERROR {
+            info!("exception type: 0x{:x}", info.type_);
+            exception.set_exception_state(&ZX_EXCEPTION_STATE_TRY_NEXT)?;
+            continue;
+        }
+
+        let thread = exception.get_thread()?;
+        assert!(
+            thread.get_koid() == current_task.thread.get_koid(),
+            "Exception thread did not match task thread."
+        );
+
+        let report = thread.get_exception_report()?;
+        if report.context.synth_code != ZX_EXCP_POLICY_CODE_BAD_SYSCALL {
+            info!("exception synth_code: {}", report.context.synth_code);
+            exception.set_exception_state(&ZX_EXCEPTION_STATE_TRY_NEXT)?;
+            continue;
+        }
+
+        let syscall_number = report.context.synth_data as u64;
+        current_task.registers = thread.read_state_general_regs()?;
+
+        let regs = &current_task.registers;
+        let args = (regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9);
+        strace!(
+            current_task,
+            "{}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+            SyscallDecl::from_number(syscall_number).name,
+            args.0,
+            args.1,
+            args.2,
+            args.3,
+            args.4,
+            args.5
+        );
+        match dispatch_syscall(&mut current_task, syscall_number, args) {
+            Ok(SyscallResult::Exit(error_code)) => {
+                strace!(current_task, "-> exit {:#x}", error_code);
+                exception.set_exception_state(&ZX_EXCEPTION_STATE_THREAD_EXIT)?;
+                return Ok(error_code);
+            }
+            Ok(SyscallResult::Success(return_value)) => {
+                strace!(current_task, "-> {:#x}", return_value);
+                current_task.registers.rax = return_value;
+            }
+            Ok(SyscallResult::SigReturn) => {
+                // Do not modify the register state of the thread. The sigreturn syscall has
+                // restored the proper register state for the thread to continue with.
+                strace!(current_task, "-> sigreturn");
+            }
+            Err(errno) => {
+                strace!(current_task, "!-> {}", errno);
+                current_task.registers.rax = (-errno.value()) as u64;
+            }
+        }
+
+        dequeue_signal(&mut current_task);
+        thread.write_state_general_regs(current_task.registers)?;
+        exception.set_exception_state(&ZX_EXCEPTION_STATE_HANDLED)?;
+    }
+}
+#+end_src
+
+Sans a few setup work (see elf loader, dynamic interpreter and process initialization below) and the actual dispatch logic,
+this is how ~starnix~ runs unmodified Linux binaries. The ~starnix~ runner first set up an exception channel.
+and then runs a loop in which it waits for any message from the exception channel.
+When the data arrive at this channel, The runner first checks if this message is actually bad syscall exception.
+If so, the runner acquires the current registers state, then dispatches the original
+syscall number and its arguments to the user-defined functions. The actually implementations are scattered among different
+files named ~syscalls.rs~. As an example, here is the link to [[https://cs.opensource.google/fuchsia/fuchsia/+/main:src/proc/bin/starnix/fs/socket/syscalls.rs;l=612-633][~sendto~]].
+
+** For a Few Dollars More
+Although I have mentioned how ~starnix~ intercepts and hijacks normal Linux syscalls. There are still quite
+a few things omitted for Linux programs running normally.
+
+*** More syscalls
+There are [[https://filippo.io/linux-syscall-table/][quite a few syscalls]] to reimplement. Linux offers many syscalls, most of which require a reimplementation.
+Some syscalls like ~gettimeofday~ need only stateless shims, while some require ~starnix~ to save state internally.
+For example, you may not want other process to access your file descriptor.
+When ~starnix~ opens a file on the Linux binaries' behave, it needs to keep track of the ownership of handles.
+Some syscalls are performance critical. Any implementation needs careful measurement.
+[[https://fuchsia.dev/fuchsia-src/contribute/governance/rfcs/0082_starnix#memory][Memory access]] is an example.
+
+*** ELF Loader and Dynamic interpreter
+Programs do not automagically run on a platform. The platform need to do a few setup work.
+The first thing it needs to do is load the program from disk to memory.
+The elf loader for ~fuchsia~ is implemented [[https://cs.opensource.google/fuchsia/fuchsia/+/main:src/proc/bin/starnix/loader.rs;drc=a447744ac172d77b4165342360c579a7fecb181b][here]].
+To complicate things further, not all programs are self-contained. Some of them require a symbol resolution at runtime.
+After the program is loaded into memory. Depending on whether the program has a ~PT_INTERP~ segment, the runner may run
+the dynamic interpreter first. The interpreter resolves symbols in the dynamically-linked binaries and then
+jumps to the entry point address (which is available from the auxiliary vector ~AT_ENTRY~, see below) of this program.
+
+*** Process initialization
+On Linux, the kernel does a few setup works for the programs which is quite different from the process initialization
+logic of ~Fuchsia~. For example, the Linux kernel set up the stack for the binaries, and then push some auxiliary vector, environment variables, argv and argc
+onto the stack (See [[https://gitlab.com/x86-psABIs/x86-64-ABI/-/blob/a0ea20c1a611e51891ea71687ba844abb86e987b/x86-64-ABI/low-level-sys-info.tex#L998][System V x86 psABIs]], [[https://lwn.net/Articles/630727/][How programs get run]] and [[https://lwn.net/Articles/631631/][How programs get run: ELF binaries]] for details),
+while on ~Fuchsia~ leverages [[https://fuchsia.dev/fuchsia-src/concepts/process/program_loading#the_processargs_protocol][processargs protocol]] to pass initial environmental information to the binary.
+The environmental information may be in a quite different format. Here is [[https://cs.opensource.google/fuchsia/fuchsia/+/main:src/proc/bin/starnix/loader.rs;l=229-242;drc=a447744ac172d77b4165342360c579a7fecb181b][the shim]] to this.
+
+#+begin_src rust
+    let stack = stack_base + (stack_size - 8);
+
+    let creds = current_task.creds.read();
+    let auxv = vec![
+        (AT_UID, creds.uid as u64),
+        (AT_EUID, creds.euid as u64),
+        (AT_GID, creds.gid as u64),
+        (AT_EGID, creds.egid as u64),
+        (AT_BASE, interp_elf.map_or(0, |interp| interp.file_base as u64)),
+        (AT_PAGESZ, *PAGE_SIZE),
+        (AT_PHDR, main_elf.file_base.wrapping_add(main_elf.headers.file_header().phoff) as u64),
+        (AT_PHNUM, main_elf.headers.file_header().phnum as u64),
+        (AT_ENTRY, main_elf.vaddr_bias.wrapping_add(main_elf.headers.file_header().entry) as u64),
+        (AT_SECURE, 0),
+    ];
+    let stack = populate_initial_stack(&stack_vmo, argv, environ, auxv, stack_base, stack)?;
+#+end_src
+It is immediately clear that what is populated to the initial stack from the parameter names.
+
+*** Other conventions
+There are many other implicit conventions Linux programs rely on.
+For example, if you can't open stdout/stderr on your system, I expect more than 50% of the programs will crash immediately.
+
+**** Posix compatibility
++ Many libraries
++ ~system(3)~
++ Posix threads
+
+**** Linux standard base
++ Many libraries
++ [[https://en.wikipedia.org/wiki/Filesystem_Hierarchy_Standard][Filesystem Hierarchy Standard]]
+
+*** Alien Interfaces
+Some Interfaces are alien to ~Fuchsia~ (there are not any counterparts in ~fuchsia~).
+These are the things which requires more consideration.
++ kill
++ Async Signal
++ Linux Futex
+
+*** Performance
+
+* Run Rabbit Run
+** Android
+Given all those hints on Android apex and [[https://source.android.com/devices/architecture/modular-system][Android's effort to modularize its system components]],
+I wonder how long it will be till we have Android system components on ~Fuchsia~ and when the [[https://source.android.com/devices/tech/dalvik][ART]] runner will be ready.
