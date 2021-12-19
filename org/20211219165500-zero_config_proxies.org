@@ -1,0 +1,201 @@
+:PROPERTIES:
+:ID:       378e0c3c-9ef6-4c2e-a8ec-600b62500046
+:END:
+#+title: zero config proxies
+#+filetags: :ptrace:proxy:
+
+In most cases, we can ~export http_proxy=http://localhost:8081~. But at times, programs do not recognize the environment variable ~http_proxy~.
+We may need to refer to their manual to learn how to configure its proxy settings.
+It is tedious. For example, the way to specify proxy of git over HTTPS different from that of git over SSH.
+We need some non-intrusive (transparent) way to specify proxies. Applications are required of nothing.
+No configuration entry for proxies, no environment variable.
+
+* VPN
+May be you're wondering what's wrong with the good old VPN. This is the way to go.
+It ultimately boils down to the flexibility.
+** proxying rules
+We need TCP connections to foreign countries to be proxied, while those to domestic servers should not be proxied.
+VPN solutions normally can only decide to proxy traffic based on simple routing tables.
+** DNS
+Simple forwarding will not work in complicated environment. Somethings we want our proxying decisions based on the domain name of the request.
+Traditional VPNs are futile in those cases.
+
+* Hooks injection
+A few packages can force some programs to use proxy. They work great in their specific use case
+and if you know how to invoke the program by command line.
+
+** proxychains
+Dynamically linked programs normally initiate network requests by calling the system libc.
+[[https://github.com/rofl0r/proxychains-ng/][Proxychains]] uses the LD_PRELOAD trick (see ~ld.so(8)~ for details) to wrap these ~connection~ requests, i.e. they are not really connecting
+to the target server, instead, they are being sent to the proxy services.
+** graftcp
+The above method does not work with statically linked binaries. For that, we need to hook into the syscalls.
+[[https://github.com/hmgle/graftcp][graftcp]] does this. It uses ~ptrace(2)~ under the hood.
+** proxifier
+One windows alternative for the above tools is [[https://www.proxifier.com/][proxifier]]. In my experience, proxifier does not work in some situation.
+I think it is because, proxifier hijack win32 API calling like proxychains, which does not always work as programs
+theoretically can just use system calls.
+
+* Linux netfilter
+Netfitler is a beast. If only I know how to domesticate it. There are a few ways to proxying all traffic with netfilter.
+Before we start we should note that it is really easy to cause infinite loop.
+The traffic from the proxy service itself should not be proxied or there will be an infinite loop.
+
+** traffic redirection methods
+This section gives an overview on how to redirect the traffic to a backing proxy service.
+Note that the backing proxy service must support tproxy/redirect proxy mode actively.
+For a working script to manipulate iptables, see [[https://github.com/contrun/dotfiles/blob/0b4c53a04eec1404ea731377a7b758e6d42d76f9/dot_bin/executable_clash-redir][clash-redir]].
+
+*** tproxy
+[[https://www.kernel.org/doc/html/latest/networking/tproxy.html][TPROXY]] stands for transparent proxy. [[https://powerdns.org/tproxydoc/tproxy.md.html][This documentation]] is more clear than the kernel documentation.
+The traffic is transparently redirected to the proxy server. The tproxy server captures the traffic,
+and pretends to be the target server. It is quite easy for the tproxy server to get the original destination,
+as tproxy server's receiving socket is set to be of original destination.
+#+begin_src shell
+  iptables -t mangle -N CLASH_EXTERNAL
+  iptables -t mangle -A CLASH_EXTERNAL -d 0.0.0.0/8 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 127.0.0.0/8 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 224.0.0.0/4 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 172.16.0.0/12 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 169.254.0.0/16 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 240.0.0.0/4 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 192.168.0.0/16 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 10.0.0.0/8 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 100.64.0.0/10 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -d 255.255.255.255 -j RETURN
+  iptables -t mangle -A CLASH_EXTERNAL -p tcp -j TPROXY --on-port "$CLASH_TPROXY_PORT" --on-ip 127.0.0.1 --tproxy-mark "$CLASH_MARK"
+  iptables -t mangle -I PREROUTING -p tcp -j CLASH_EXTERNAL
+  if [[ -z "$(ip rule list fwmark "$CLASH_MARK" table "$CLASH_TABLE")" ]]; then
+      ip rule add fwmark "$CLASH_MARK" table "$CLASH_TABLE"
+  fi
+  ip route replace local 0.0.0.0/0 dev lo table "$CLASH_TABLE"
+#+end_src
+
+A few notes:
++ The above script makes all TCP traffic to be tproxied to ~127.0.0.1:$CLASH_TPROXY_PORT~.
++ I intentionally create a new chain called ~CLASH_EXTERNAL~ to make it easier to restore order.
+Running ~iptables-save -c | grep -v CLASH_ | iptables-restore -c~ is enough.
++ The ~ip rule~ and ~ip route~ commands make sure all traffic is forwarded, including local traffic and forwarding traffic.
++ if check is used for idem-potency.
+
+*** redirect
+Iptables redirect just redirects the traffic to the target server. The original server could be a normal server (say a normal HTTP server),
+or a proxy (say a socks5 proxy which would then forward the traffic to socks5 proxy server).
+#+begin_src shell
+  iptables -t nat -N CLASH_LOCAL
+  iptables -t nat -A CLASH_LOCAL -m owner --uid-owner "$CLASH_USER" -j RETURN
+  iptables -t nat -A CLASH_LOCAL -m owner --gid-owner "$NOPROXY_GROUP" --suppl-groups -j RETURN || true
+  iptables -t nat -A CLASH_LOCAL -d 0.0.0.0/8 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 127.0.0.0/8 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 224.0.0.0/4 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 172.16.0.0/12 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 169.254.0.0/16 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 240.0.0.0/4 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 192.168.0.0/16 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 10.0.0.0/8 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 100.64.0.0/10 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -d 255.255.255.255 -j RETURN
+  iptables -t nat -A CLASH_LOCAL -p tcp -j REDIRECT --to-ports "$CLASH_REDIRECT_PORT"
+  iptables -t nat -I OUTPUT -p tcp -j CLASH_LOCAL
+
+  iptables -t nat -N CLASH_EXTERNAL
+  iptables -t nat -A CLASH_EXTERNAL -d 0.0.0.0/8 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 127.0.0.0/8 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 224.0.0.0/4 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 172.16.0.0/12 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 169.254.0.0/16 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 240.0.0.0/4 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 192.168.0.0/16 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 10.0.0.0/8 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 100.64.0.0/10 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -d 255.255.255.255 -j RETURN
+  iptables -t nat -A CLASH_EXTERNAL -p tcp -j REDIRECT --to-ports "$CLASH_REDIRECT_PORT"
+  iptables -t nat -I PREROUTING -p tcp -j CLASH_EXTERNAL
+#+end_src
+
+A few notes:
++ Need to add rule for both ~PREROUTING~ and ~OUTPUT~ for local traffic and forwarding traffic.
++ NAT under the hood.
++ It is a little tricky for the redirect proxy to [[https://stackoverflow.com/a/5814636][obtain the original destination address and port]].
++ Works perfectly if you don't need the original destination (like DNS request).
+*** DNAT
+Just like redirect.
+
+** traffic matching methods
+See ~iptables-extensions(8)~ for more methods.
+*** ipset
+netfilter itself is able to match a few IPs effectively. When an entire country's IP addresses need matching,
+it would be better to use ipset.
+*** cgroup
+See [[https://github.com/springzfx/cgproxy][cgproxy]].
+*** owner, supplementary groups
+I use iptables owner module to avoid infinite loop. Use supplementary groups to skip proxy for some programs.
+#+begin_src shell
+  iptables -t mangle -I CLASH_LOCAL -m owner --uid-owner "$CLASH_USER" -j RETURN
+  iptables -t mangle -I CLASH_LOCAL -m owner --gid-owner "$NOPROXY_GROUP" --suppl-groups -j RETURN || true
+#+end_src
+I also add the following to a systemd unit to skip proxy for a systemd unit.
+#+begin_src systemd
+[Service]
+SupplementaryGroups=noproxy
+#+end_src
+
+* DNS resolution
+It is of no use for the proxy server to send its requests to a fake server. There are mainly to methods to avoid [[https://en.wikipedia.org/wiki/DNS_spoofing][DNS poisoning]].
+** [[https://en.wikipedia.org/wiki/Bogon_filtering][Bogon IP]]
++ Client initiate a DNS request to resolve google.com
++ The proxy service immediately returns the IP address 192.18.0.22, insert the mapping from 192.18.0.22 to google.com into its internal state
++ The client initiate a TCP connection to 192.18.0.22
++ Upon receive the IP packet to 192.18.0.22, the proxy service finds out the request is to google.com. It decides to send the traffic through the proxy server
+
+** Redirect DNS requests
++ Client initiate a DNS request to resolve google.com
++ The proxy service hijack the request and redirect the traffic to its internal DNS server. The un-posioned address 142.250.66.46 is returned
++ The client initiate a TCP connection to 142.250.66.46
++ The proxy service checks the IP database, and decides to redirect the traffic to the proxy server
+
+* L4/L7 proxies to L3/L2 VPNs
+If you ever used macOS, iOS and android, you will find how easy it is on these platform to set up an VPN service.
+These VPN services, unlike traditional ones, are much more flexible. They are like PAC proxies, but for all programs.
+Below is a typical proxy traffic flow in those platforms.
+
+#+begin_example
+apps <-> OS <-(L2/L3)-> virtual tunnel <-(L2/L3)-> proxy frontend <-(L4)-> socks5 client <-> proxy client <-> internet <-> proxy server <-> internet
+#+end_example
++ The proxy first creates a virtual tunnel using OS-specific APIs (e.g. TUN/TAP on Linux, VPNService on Android).
++ Upon receiving app request, the OS constructs L2/L3 packets (ethernet/ip packets), and send those packets to the proxy over the virtual tunnel.
++ The proxy unwraps those L2/L3 packets and then sends TCP/UDP packets to the socks5 client.
++ The proxy backend client sends the proxy requests to the proxy backend server over the Internet.
++ Upon receiving the response, the proxy server sends it back to the proxy client.
+
+There are a few things requiring special attention.
++ How does the proxy frontend get L4 packets from L2/L3 packets in the chain
+     ~OS <-(L2/L3)-> virtual tunnel <-(L2/L3)-> proxy frontend <-(L4)-> socks5 client~ ?
++ How does the proxy client avoid infinite loop?
+The first question is solved by [[https://github.com/darkk/redsocks][~redsocks~]] and [[https://github.com/ambrop72/badvpn][~tun2socks~]]. There are quite a few solutions on the market.
+Moreover, apple, by the OS itself, provides such L2/L3 to L4 convertor. It is called [[https://developer.apple.com/documentation/networkextension/neappproxyprovider][NEAppProxyProvider]].
+This is why there are some many proxies on macOS with enhanced mode. [[https://developer.apple.com/documentation/networkextension][networkextension]] also provides DNS Proxy, Filtering API
+Windows users also have a few generic solutions like [[https://github.com/eycorsican/leaf][leaf]] and [[https://github.com/YtFlow/Maple][maple]]. Besides,
+[[https://github.com/Dreamacro/clash#premium-release][clash premium]] supports tun, and it does those tunnel to sockss conversions automatically.
+
+The second question is platform-dependent. For android, [[https://fqrouter.tumblr.com/post/51474945203/socks%E4%BB%A3%E7%90%86%E8%BD%ACvpn][this article]] is oldie and goodie.
+
+* router in the middle
+You can also set up a router in the middle to transparently proxy your traffic.
+
+** iptables/tun on openwrt
+All you need to enable IP forwarding and following the above instructions.
+** announce another host as gateway or customize routing table manually
+If your router is powerful enough, just set up proxy in the router. Otherwise,
+announce the gateway to be a proxy server in DHCP.
+You may also change the default routing table manually.
+** ARP spoofing
+The downsides for above method is that, you either need control to the router or
+you need to change a few things manually on each device.
+fqrouter had a slick trick. It fools the hosts in the LAN to believe that this host is the gateway by ARP spoofing.
+See [[https://github.com/fqrouter/fqlan/blob/1adc566098e083cc8cea40834207165e90e2c197/fqlan.py][here]] for details.
+** VPN Hotspot
+The Android APP [[https://github.com/Mygod/VPNHotspot][VPN Hotspot]] works like a charm.
++ WiFi relay
++ new host spot
+** Windows/macOS l2 proxy
