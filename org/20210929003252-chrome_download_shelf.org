@@ -1,7 +1,7 @@
 :PROPERTIES:
 :ID:       14da66c8-feb8-49d1-8888-db76d1c7b8a8
 :END:
-#+title: Chrome download shelf
+#+title: chrome download shelf
 #+filetags: :chrome:internals:
 Chrome download shelf is the widget shown in the buttom when you initiate a new download. This document summarizes how the download shelf is implemented.
 It is sketchy on the details. For more information, click on the source code or documentation links.
