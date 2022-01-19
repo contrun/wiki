@@ -1,75 +1,73 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink" xmlns:dc="http://purl.org/dc/elements/1.1/" version="1.1" viewBox="0 0 280 394" width="280pt" height="394pt">
-  <metadata> Produced by manually editing https://raw.githubusercontent.com/rust-lang/blog.rust-lang.org/master/static/images/2016-04-MIR/flow.svg </metadata>
-  <defs>
-    <font-face font-family="Helvetica" font-size="12" units-per-em="1000" underline-position="-75.683594" underline-thickness="49.316406" slope="0" x-height="522.94922" cap-height="717.28516" ascent="770.01953" descent="-229.98047" font-weight="500">
-      <font-face-src>
-        <font-face-name name="Helvetica"/>
-      </font-face-src>
-    </font-face>
-    <marker orient="auto" overflow="visible" markerUnits="strokeWidth" id="FilledArrow_Marker" viewBox="-1 -4 10 8" markerWidth="10" markerHeight="8" color="black">
-      <g>
-        <path d="M 8 0 L 0 -3 L 0 3 Z" fill="currentColor" stroke="currentColor" stroke-width="1"/>
-      </g>
-    </marker>
-  </defs>
-  <g stroke="none" stroke-opacity="1" stroke-dasharray="none" fill="none" fill-opacity="1">
-    <title>flow</title>
-    <g>
-      <title>Layer 1</title>
-      <text transform="translate(33 243.5)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="19.601562" y="11" textLength="13.347656">LL</tspan>
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="32.064453" y="11" textLength="33.333984">VM IR</tspan>
-      </text>
-      <rect x="28" y="45.5" width="95" height="27" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(33 52)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="9.4853516" y="11" textLength="66.029297">Rust Source</tspan>
-      </text>
-      <rect x="28" y="103.5" width="95" height="27" fill="white"/>
-      <rect x="28" y="103.5" width="95" height="27" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(33 110)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="32.166992" y="11" textLength="20.666016">HIR</tspan>
-      </text>
-      <rect x="28" y="237" width="95" height="27" fill="white"/>
-      <rect x="28" y="237" width="95" height="27" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(33 243.5)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="19.601562" y="11" textLength="13.347656">LL</tspan>
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="32.064453" y="11" textLength="33.333984">VM IR</tspan>
-      </text>
-      <rect x="28" y="295" width="95" height="27" fill="white"/>
-      <rect x="28" y="295" width="95" height="27" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(33 301.5)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="3.8105469" y="11" textLength="77.378906">Machine Code</tspan>
-      </text>
-      <line x1="75.4" y1="73" x2="75.4" y2="93.1" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <line x1="75.4" y1="264.5" x2="75.4" y2="284.6" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(97 81)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="0" y="11" textLength="116.07422">Parsing and Desugaring</tspan>
-      </text>
-      <text transform="translate(97 195.75)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="0" y="11" textLength="88.70508">Borrow checking</tspan>
-      </text>
-      <text transform="translate(97 272.5)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="0" y="11" textLength="66.691406">Optimization</tspan>
-      </text>
-      <text transform="translate(97 140.5625)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="0" y="11" textLength="7.330078">T</tspan>
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="6.673828" y="11" textLength="70.04297">ype checking</tspan>
-      </text>
-      <text transform="translate(97 215.75)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="0" y="11" textLength="66.691406">Optimization</tspan>
-      </text>
-      <rect x="28" y="161.5" width="95" height="27" fill="white"/>
-      <rect x="28" y="161.5" width="95" height="27" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(33 168)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="31.501953" y="11" textLength="21.996094">MIR</tspan>
-      </text>
-      <line x1="75.40001" y1="131" x2="75.40001" y2="151.1" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <line x1="75.4" y1="189" x2="75.4" y2="226.6" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
-      <text transform="translate(18 17.5)" fill="black">
-        <tspan font-family="Helvetica" font-size="12" font-weight="500" x="6" y="11" textLength="26.021484">Rust compilation flow</tspan>
-      </text>
-    </g>
-  </g>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.49.3 (0)
+ -->
+<!-- Title: G Pages: 1 -->
+<svg width="147pt" height="422pt"
+ viewBox="0.00 0.00 147.00 422.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 418)">
+<title>G</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-418 143,-418 143,4 -4,4"/>
+<!-- source -->
+<g id="node1" class="node">
+<title>source</title>
+<polygon fill="none" stroke="black" points="86,-414 0,-414 0,-378 86,-378 86,-414"/>
+<text text-anchor="middle" x="43" y="-392.3" font-family="Times,serif" font-size="14.00">rust source</text>
+</g>
+<!-- hir -->
+<g id="node2" class="node">
+<title>hir</title>
+<polygon fill="none" stroke="black" points="86,-312 0,-312 0,-276 86,-276 86,-312"/>
+<text text-anchor="middle" x="43" y="-290.3" font-family="Times,serif" font-size="14.00">HIR</text>
+</g>
+<!-- source&#45;&gt;hir -->
+<g id="edge1" class="edge">
+<title>source&#45;&gt;hir</title>
+<path fill="none" stroke="black" d="M43,-377.58C43,-362.38 43,-340.07 43,-322.46"/>
+<polygon fill="black" stroke="black" points="46.5,-322.22 43,-312.22 39.5,-322.22 46.5,-322.22"/>
+<text text-anchor="middle" x="75" y="-348.8" font-family="Times,serif" font-size="14.00"> parsing</text>
+<text text-anchor="middle" x="75" y="-333.8" font-family="Times,serif" font-size="14.00"> desugaring</text>
+</g>
+<!-- mir -->
+<g id="node3" class="node">
+<title>mir</title>
+<polygon fill="none" stroke="black" points="86,-225 0,-225 0,-189 86,-189 86,-225"/>
+<text text-anchor="middle" x="43" y="-203.3" font-family="Times,serif" font-size="14.00">MIR</text>
+</g>
+<!-- hir&#45;&gt;mir -->
+<g id="edge2" class="edge">
+<title>hir&#45;&gt;mir</title>
+<path fill="none" stroke="black" d="M43,-275.8C43,-264.16 43,-248.55 43,-235.24"/>
+<polygon fill="black" stroke="black" points="46.5,-235.18 43,-225.18 39.5,-235.18 46.5,-235.18"/>
+<text text-anchor="middle" x="83" y="-246.8" font-family="Times,serif" font-size="14.00"> type checking</text>
+</g>
+<!-- llir -->
+<g id="node4" class="node">
+<title>llir</title>
+<polygon fill="none" stroke="black" points="86,-123 0,-123 0,-87 86,-87 86,-123"/>
+<text text-anchor="middle" x="43" y="-101.3" font-family="Times,serif" font-size="14.00">LLVM IR</text>
+</g>
+<!-- mir&#45;&gt;llir -->
+<g id="edge3" class="edge">
+<title>mir&#45;&gt;llir</title>
+<path fill="none" stroke="black" d="M43,-188.58C43,-173.38 43,-151.07 43,-133.46"/>
+<polygon fill="black" stroke="black" points="46.5,-133.22 43,-123.22 39.5,-133.22 46.5,-133.22"/>
+<text text-anchor="middle" x="91" y="-159.8" font-family="Times,serif" font-size="14.00"> borrow checking</text>
+<text text-anchor="middle" x="91" y="-144.8" font-family="Times,serif" font-size="14.00"> optimization</text>
+</g>
+<!-- machine_code -->
+<g id="node5" class="node">
+<title>machine_code</title>
+<polygon fill="none" stroke="black" points="86,-36 0,-36 0,0 86,0 86,-36"/>
+<text text-anchor="middle" x="43" y="-14.3" font-family="Times,serif" font-size="14.00">machine code</text>
+</g>
+<!-- llir&#45;&gt;machine_code -->
+<g id="edge4" class="edge">
+<title>llir&#45;&gt;machine_code</title>
+<path fill="none" stroke="black" d="M43,-86.8C43,-75.16 43,-59.55 43,-46.24"/>
+<polygon fill="black" stroke="black" points="46.5,-46.18 43,-36.18 39.5,-46.18 46.5,-46.18"/>
+<text text-anchor="middle" x="79.5" y="-57.8" font-family="Times,serif" font-size="14.00"> optimization</text>
+</g>
+</g>
 </svg>

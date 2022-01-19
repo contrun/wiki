@@ -25,7 +25,7 @@ Here are a few references:
 + [[https://github.com/rust-lang/rust/pull/43076/files][Generator support]]
 + [[https://rust-lang.github.io/async-book/][Asynchronous Programming in Rust]]
 
-Below is roughly how rust compiler compiles the rust source code into machine code.
+Below (adapted from [[https://blog.rust-lang.org/2016/04/19/MIR.html][here]]) is roughly how rust compiler compiles the rust source code into machine code.
 
 [[file:assets/images/rust-compilation-flow.svg]]
 
