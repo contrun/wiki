@@ -1,0 +1,11 @@
+digraph G {
+  source -> hir [label=" parsing\n desugaring"];
+  hir -> mir [label=" type checking"];
+  mir -> llir [label=" borrow checking\n optimization"];
+  llir -> machine_code [label=" optimization"];
+  source [shape=box,width=1.2,fixedsize=true,label="rust source"];
+  hir [shape=box,width=1.2,fixedsize=true,label="HIR"];
+  mir [shape=box,width=1.2,fixedsize=true,label="MIR"];
+  llir [shape=box,width=1.2,fixedsize=true,label="LLVM IR"];
+  machine_code [shape=box,width=1.2,fixedsize=true,label="machine code"]
+}
