@@ -2,6 +2,7 @@
 :ID:       2e4ec310-908d-4aee-800e-af631f0967a5
 :END:
 #+title: lowering async await in rust
+#+filetags: :coroutine:llvm:code_generation:async_programming:rust:
 
 
 We have a simple program ([[https://play.rust-lang.org/?version=nightly&mode=debug&edition=2021&gist=91241061cec74bd633c22789f1ae1196][playground link]]) built with rust's async/await feature.
@@ -23,6 +24,12 @@ Here are a few references:
 + [[https://github.com/vadimcn/rfcs/blob/coroutines2/text/0000-coroutines.md][Stackless coroutines]]
 + [[https://github.com/rust-lang/rust/pull/43076/files][Generator support]]
 + [[https://rust-lang.github.io/async-book/][Asynchronous Programming in Rust]]
+
+Below is roughly how rust compiler compiles the rust source code into machine code.
+
+[[file:assets/images/rust-compilation-flow.svg]]
+
+We will dive into the code generation process of async/await in a moment.
 
 * High level intermediate representations
 
@@ -61,9 +68,9 @@ fn main() {
 }
 #+end_src
 
-We can see that the async main function is replaced with a variable called body,
-and we now have a synchronous main function which stops at a [[https://docs.rs/tokio/latest/tokio/runtime/struct.Runtime.html#method.block_on][block_on]] function.
-The signature of block_on shows that it accepts a ~future~.
+We can see that the async main function is replaced with a variable called body.
+We now have a synchronous main function which stops at a [[https://docs.rs/tokio/latest/tokio/runtime/struct.Runtime.html#method.block_on][block_on]] function,
+whose signature shows that it accepts a [[https://doc.rust-lang.org/std/future/trait.Future.html][~future~]].
 
 How does this ~async {sleep(Duration::from_secs(1)).await;}~ turn out to be a future?
 
@@ -104,7 +111,7 @@ fn main() {
 }
 #+end_src
 
-There are quite a few [[https://doc.rust-lang.org/beta/unstable-book/language-features/lang-items.html][lang_items]] in the snippet.
+There are quite a few [[https://doc.rust-lang.org/beta/unstable-book/language-features/lang-items.html][lang_items]] in this snippet.
 # [[https://manishearth.github.io/blog/2017/01/11/rust-tidbits-what-is-a-lang-item/][Rust Tidbits: What Is a Lang Item? - In Pursuit of Laziness]]
 We view those ~lang_items~ as compiler plugins to generate some specific codes (maybe from some specific inputs).
 For example, the ~lang_item~ ~from_generator~ is used to generate a future from a generator.
@@ -113,21 +120,21 @@ We used a few ~lang_items~ in our example. Here is [[https://github.com/rust-lan
 In our case, lowering to HIR is basically a combination of expanding async in ~async fn main { body }~ and
 expanding await in ~future.await~, where the body is our async main function, and future is our sleeping task.
 
-These two expansion are accomplished by [[https://github.com/rust-lang/rust/blob/3ee016ae4d4c6ee4a34faa2eb7fdae2ffa7c9b46/compiler/rustc_ast_lowering/src/expr.rs#L518-L607][~make_async_expr~]] and [[https://github.com/rust-lang/rust/blob/3ee016ae4d4c6ee4a34faa2eb7fdae2ffa7c9b46/compiler/rustc_ast_lowering/src/expr.rs#L609-L800][~lower_expr_await]]~.
+These two expansion are accomplished by [[https://github.com/rust-lang/rust/blob/3ee016ae4d4c6ee4a34faa2eb7fdae2ffa7c9b46/compiler/rustc_ast_lowering/src/expr.rs#L518-L607][~make_async_expr~]] and [[https://github.com/rust-lang/rust/blob/3ee016ae4d4c6ee4a34faa2eb7fdae2ffa7c9b46/compiler/rustc_ast_lowering/src/expr.rs#L609-L800][~lower_expr_await~]].
 
 ~make_async_expr~ takes an async function or an async block, and converts it to a future.
 Below is its comment.
 
-#+begin_src rust
-    /// Lower an `async` construct to a generator that is then wrapped so it implements `Future`.
-    ///
-    /// This results in:
-    ///
-    /// ```text
-    /// std::future::from_generator(static move? |_task_context| -> <ret_ty> {
-    ///     <body>
-    /// })
-    /// ```
+#+begin_src
+    Lower an `async` construct to a generator that is then wrapped so it implements `Future`.
+
+    This results in:
+
+    ```text
+    std::future::from_generator(static move? |_task_context| -> <ret_ty> {
+        <body>
+    })
+    ```
 #+end_src
 
 
@@ -136,21 +143,21 @@ Below is its comment.
 Below is its comment.
 
 #+begin_src rust
-    /// Desugar `<expr>.await` into:
-    /// ```rust
-    /// match ::std::future::IntoFuture::into_future(<expr>) {
-    ///     mut pinned => loop {
-    ///         match unsafe { ::std::future::Future::poll(
-    ///             <::std::pin::Pin>::new_unchecked(&mut pinned),
-    ///             ::std::future::get_context(task_context),
-    ///         ) } {
-    ///             ::std::task::Poll::Ready(result) => break result,
-    ///             ::std::task::Poll::Pending => {}
-    ///         }
-    ///         task_context = yield ();
-    ///     }
-    /// }
-    /// ```
+    Desugar `<expr>.await` into:
+    ```rust
+    match ::std::future::IntoFuture::into_future(<expr>) {
+        mut pinned => loop {
+            match unsafe { ::std::future::Future::poll(
+                <::std::pin::Pin>::new_unchecked(&mut pinned),
+                ::std::future::get_context(task_context),
+            ) } {
+                ::std::task::Poll::Ready(result) => break result,
+                ::std::task::Poll::Pending => {}
+            }
+            task_context = yield ();
+        }
+    }
+    ```
 #+end_src
 
 Substitute all the variable values, ~body~ is then set to
@@ -176,18 +183,19 @@ We will come to the ~task_context~ thing in a later point.
 For now, we are satisfied with the fact that, ~task_context~ is passed from the async runtime and it is
 used by the reactor to notify the executor a future is ready to continue.
 
-A bigger mystery is the ~yield~.
+The argument of ~from_generator~ seems to be a closure, but it is a generator.
+The secret lies in the ~yield~ statement.
 
 * Generator code generation
 
 What is this ~yield~ thing? We have encountered ~yield~ in other languages.
 Legend has it that in programming languages with cooperative multitasking feature,
-when one procedure runs to the yielding point it automagically gives up its control of the CPU, so that other tasks can continue.
-And when other procedures yield, it have a chance to continue. But how?
+when one procedure runs to the yielding point it automagically gives up its control of the CPU so that other tasks can continue,
+and when other procedures yield, it have a chance to continue. But how?
 Frequently it is implemented with [[https://en.wikipedia.org/wiki/Setjmp.h][~setjmp/longjmp~]]. What about rust? Is it using mechanism like that?
 
 Let's go lower to [[https://rustc-dev-guide.rust-lang.org/mir/index.html][Rust's Mid-level Intermediate Representation (MIR)]] with ~RUSTFLAGS="--emit mir" cargo -v run~.
-Below is a sample MIR file (found in the path ~target/debug/deps/*.mir~).
+Below is MIR of the generated coroutine of the async main function (found in the path ~target/debug/deps/*.mir~).
 
 #+begin_src rust-mir
 fn main::{closure#0}(_1: Pin<&mut [static generator@src/main.rs:4:17: 6:2]>, _2: ResumeTy) -> GeneratorState<(), ()> {
@@ -369,7 +377,8 @@ Our program decides jumping to which basic block based on the state's current di
 For example, when the discriminant is 0, the program jumps to ~bb1~.
 Some branch is unreachable because those discriminants are just not possible to have those values (the otherwise branch above).
 Some states (the 1_u32 and 2_u32 branches above) are malformed.
-The state 0_u32 means that we just started polling. When the sleeping task is finished, the state is transitioned to 3_u32.
+The state 0_u32 means that we just get started. The state 3_u32 means that polling is already started, but the task is not finished yet.
+When the sleeping task is finished, the state is transitioned to 1_u32.
 
 Let's look at an exemplary state transition.
 
@@ -419,12 +428,12 @@ Let's look at an exemplary state transition.
 ~bb6~ and ~bb7~ obtains the result of the ~poll~ function of the sleeping future. Depending on whether the sleeping task is finished,
 the control flow may go from ~bb8~ to ~bb9~ (which sets the state to be 3) or ~bb11~ and ~bb12~ (which sets the state to be 1).
 
-In summary, the rust compiler generates a closure which keeps the state of the coroutine.
-The state transition is driven by repeated execution of the closure.
+In summary, the rust compiler generates a closure which captures the state of the async block.
+The state transition is driven by repeated execution of this closure.
 The pausing of a coroutine is just an early return on no final results,
 while the resumption is just a rerun of the closure.
 
-To make this more clearly, let's add one more suspension point ([[https://play.rust-lang.org/?version=nightly&mode=debug&edition=2021&gist=573f94052c3485e3dba8f2d49cd1e7fa][playground link]]).
+To make this more clear, let's add one more suspension point ([[https://play.rust-lang.org/?version=nightly&mode=debug&edition=2021&gist=573f94052c3485e3dba8f2d49cd1e7fa][playground link]]).
 
 #+begin_src rust
 use tokio::time::{sleep, Duration};
@@ -436,7 +445,7 @@ async fn main() {
 }
 #+end_src
 
-This time the entry point has one more branches to go. The new state 4_u32, which represents the time gap
+This time the entry point has one more branches to go. A new state 4_u32, which represents the time gap
 between the first future finished and the second future still running, is created.
 
 #+begin_src rust-mir
@@ -532,3 +541,5 @@ So in our case, when the async runtime calls ~gen.resume(ResumeTy(NonNull::from(
 which is nothing but a wrapper of ~cx~, a [[https://docs.rs/futures/latest/futures/task/struct.Context.html][futures::task::Context]].
 In this way, futures inside the generator can inform the executor when they are ready to make progress
 (see [[https://rust-lang.github.io/async-book/02_execution/02_future.html][The Future Trait - Asynchronous Programming in Rust]] for more information).
+
+# TODO: add generated code to illustrate how generator arguments are passed.
