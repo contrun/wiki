@@ -8,6 +8,7 @@ staticDir = ["static", "org/assets"]
 
 [params]
 email = "test@example.org"
+sourceRepoURL = "https://example.org/"
 
 [markup]
   [markup.goldmark]

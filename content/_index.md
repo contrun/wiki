@@ -4,4 +4,5 @@ type = "index"
 draft = false
 +++
 
-# Table of Contents
+Welcome. If you have any comments, please open an issue in the [source repo]({{< param "sourceRepoURL" >}}).
+# List of Posts
