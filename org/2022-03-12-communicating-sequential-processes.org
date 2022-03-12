@@ -1,0 +1,129 @@
+#+TITLE: communicating sequential processes
+#+DATE: Sat, 12 Mar 2022 22:09:28 +0800
+#+SLUG: communicating-sequential-processes
+
+This is a review of the book [[http://www.usingcsp.com/cspbook.pdf][Communicating Sequential Processes by C. A. R. Hoare]].
+
+# TODO: find a meme about Quoting Edsger W. Dijkstra
+
+I'd like to quote Dijkstra on how enlightening this book is.
+
+#+begin_quote
+The most profound reason, however, was keenly felt by those who had
+seen earlier drafts of his manuscript, which shed with surprising clarity new
+light on what computing science could—or even should—be. To say or feel
+that the computing scientist’s main challenge is not to get confused by the
+complexities of his own making is one thing; it is quite a different matter to
+discover and show how a strict adherence to the tangible and quite explicit
+elegance of a few mathematical laws can achieve this lofty goal. It is here
+that we, the grateful readers, reap to my taste the greatest benefits from the
+scientific wisdom, the notational intrepidity, and the manipulative agility of
+Charles Antony Richard Hoare.
+#+end_quote
+
+* The book
+I agree with [[https://twitter.com/yufeizhao/status/1246857774958403584][Yufei Zhao]] on the importance of good-story telling in papers/monographs/textbooks.
+
+#+begin_src
+Writing a good math paper should be like telling an engaging story.
+Who are the characters? What are their drives? Who are the villains?
+Where are the obstacles? Conflict? Suspense? Climax? Ending?
+#+end_src
+
+I think /Communicating Sequential Processes/ is an excellent example of
+how an engaging story can be told in a monograph.
+
+** Motivation
+The motivation of /Communicating Sequential Processes/ is noble.
+Hoare stated it in the Chapter Discussion.
+
+#+begin_quote
+The main objective of my research into communicating processes has been to
+find the simplest possible mathematical theory with the following desirable
+properties
+
+1. It should describe a wide range of interesting computer applications, from
+   vending machines, through process control and discrete event simulation,
+   to shared-resource operating systems.
+2. It should be capable of efficient implementation on a variety of conventional
+   and novel computer architectures, from time-sharing computers
+   through microprocessors to networks of communicating microprocessors.
+3. It should provide clear assistance to the programmer in his tasks of
+    specification, design, implementation, verification and validation of complex
+    computer systems.
+#+end_quote
+
+Let me paraphrase it. CSP aims to present a mathematical theory which
+is able to model various interesting computer applications.
+This model is efficiently implementable. Guided with the principles of this theory,
+computer programmer can easily implement concurrent computer programs, whose correctness
+can be statically validated and is formally verifiable.
+
+This is quite intriguing.
+
+** Presentation
+The presentation is terse and to the point. Most concepts are start from first principle,
+which can be overwhelming.
+
+The first chapter starts with what a process is and how to define it formally.
+It was like rethink recursions and integers purely in terms of functions.
+You wonder how far we can go and will be continuously amazed.
+
+TODO: finish this.
+
+** Complains
++ I've found at least 30 typos in [[http://www.usingcsp.com/cspbook.pdf][this pdf file]].
+
+* Real world
+# [[https://go-proverbs.github.io/][Go Proverbs]]
+** Message-passing over shared memory
+# https://songlh.github.io/paper/go-study.pdf
+# #+begin_quote
+# Our study found that message passing does not necessarily make multi-threaded programs less error-prone than shared memory.
+# #+end_quote
+*** What's it?
+Don't communicate by sharing memory; share memory by communicating.
+*** Why is it better?
++ Shared memory: implicit dependencies, state spill.
++ Message-passing: explicit state transition, better encapsulation.
++ Shared memory is impossible in distributed and heterogeneous environment, see [[https://dl.acm.org/doi/10.1145/1629575.1629579][multikernel]].
+
+** relationship with actors
+CSP and Actors actually do not differ so much. Occam, a language which closely follows the principles of CSP,
+can be readily recognized as an actor model implementation. [[https://twitter.com/rob_pike/status/579787497070141441][According to Rob Pike]],
+
+#+begin_quote
+Erlang's model (aka actors) is very close to the original, pre-channels CSP ca. 1978. As said, Erlang "stems from CSP".
+#+end_quote
+
+See also,
+[[https://en.wikipedia.org/wiki/Communicating_sequential_processes#Comparison_with_the_actor_model][Communicating sequential processes]],
+[[https://en.wikipedia.org/wiki/Actor_model_and_process_calculi_history#Early_work][Actor model and process calculi history]],
+and [[https://swtch.com/~rsc/thread/][Bell Labs and CSP Threads]].
+
+Let us briefly describe the similarity and difference on their common implementations (say akka and go).
+
+*** similarity
++ processes: they are all based on lightweight processes (respectively actors and processes).
++ communication: the processes communicate with each other by concurrent queues.
+
+*** difference
++ Communication channel (mailboxes) are associated with the actor in actor model, while
+  go channel lives by itself. Early version of CSP is like go channel, while latter version
+  of CSP is like akka actor mailbox. Bundling mailboxes with actors provides better encapsulation.
++ Mailboxes are by default asynchronous, while channels can be used to synchronize.
+  # Actors are asynchronous concurrent objects.
+  # Sending a message to the actor is like calling an object method.
+  # Actors and usual objects differ in calling object methods is not usually thread-safe
+  # while sending actor messages is thread-safe. Another thing to note is s
+  Sending actor messages is non-blocking.
+  In the CSP model, the sender and receiver can synchronize with each other by a channel, e.g.
+  it is a common practice to use a done channel to notify some task in done in go.
++ An actor requires an identity, while goroutines are anonymous. We can send an actor messages
+  by resolving ActorRefs. This is especially useful in communicating processes across nodes.
+
+** go's implementation of CSP
++ Some useful CSP concepts are not implemented.
+For instance, pipes (like Unix pipes, but for CSPs), subordinate (like subroutines, but for CSPs)
++ Channels are not associated with processes.
++ Formal verification is not used, e.g. formally verifying dead lock free.
