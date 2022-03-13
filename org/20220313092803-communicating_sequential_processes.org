@@ -1,8 +1,10 @@
-#+TITLE: communicating sequential processes
-#+DATE: Sat, 12 Mar 2022 22:09:28 +0800
-#+SLUG: communicating-sequential-processes
+:PROPERTIES:
+:ID:       13d44b54-a343-44f2-8a7a-610399959d1a
+:END:
+#+title: communicating sequential processes
+#+filetags: :book_review:process_calculus:actor_model:theoretical_computer_science:concurrent_programming:communicating_sequential_processes:
 
-This is a review of the book [[http://www.usingcsp.com/cspbook.pdf][Communicating Sequential Processes by C. A. R. Hoare]].
+This is an unfinished review of the book [[http://www.usingcsp.com/cspbook.pdf][Communicating Sequential Processes by C. A. R. Hoare]].
 
 # TODO: find a meme about Quoting Edsger W. Dijkstra
 
@@ -22,13 +24,13 @@ Charles Antony Richard Hoare.
 #+end_quote
 
 * The book
-I agree with [[https://twitter.com/yufeizhao/status/1246857774958403584][Yufei Zhao]] on the importance of good-story telling in papers/monographs/textbooks.
+I can't agree with [[https://twitter.com/yufeizhao/status/1246857774958403584][Yufei Zhao]] more on the importance of good-story telling in papers/monographs/textbooks.
 
-#+begin_src
+#+begin_quote
 Writing a good math paper should be like telling an engaging story.
 Who are the characters? What are their drives? Who are the villains?
 Where are the obstacles? Conflict? Suspense? Climax? Ending?
-#+end_src
+#+end_quote
 
 I think /Communicating Sequential Processes/ is an excellent example of
 how an engaging story can be told in a monograph.
@@ -66,8 +68,8 @@ The presentation is terse and to the point. Most concepts are start from first p
 which can be overwhelming.
 
 The first chapter starts with what a process is and how to define it formally.
-It was like rethink recursions and integers purely in terms of functions.
-You wonder how far we can go and will be continuously amazed.
+It was like rethinking recursions and integers purely in terms of functions.
+You wonder how far we can go and will be continuously amazed by the progress you made.
 
 TODO: finish this.
 
@@ -105,25 +107,26 @@ Let us briefly describe the similarity and difference on their common implementa
 
 *** similarity
 + processes: they are all based on lightweight processes (respectively actors and processes).
-+ communication: the processes communicate with each other by concurrent queues.
++ communication: the processes communicate with each other by concurrent queues (respectively mailboxes and channels).
 
 *** difference
 + Communication channel (mailboxes) are associated with the actor in actor model, while
   go channel lives by itself. Early version of CSP is like go channel, while latter version
   of CSP is like akka actor mailbox. Bundling mailboxes with actors provides better encapsulation.
+
 + Mailboxes are by default asynchronous, while channels can be used to synchronize.
+  Sending actor messages is non-blocking.
+  In the CSP model, the sender and receiver can synchronize with each other by a channel, e.g.
+  it is a common practice to use a done channel to notify some task in done in go.
   # Actors are asynchronous concurrent objects.
   # Sending a message to the actor is like calling an object method.
   # Actors and usual objects differ in calling object methods is not usually thread-safe
   # while sending actor messages is thread-safe. Another thing to note is s
-  Sending actor messages is non-blocking.
-  In the CSP model, the sender and receiver can synchronize with each other by a channel, e.g.
-  it is a common practice to use a done channel to notify some task in done in go.
+
 + An actor requires an identity, while goroutines are anonymous. We can send an actor messages
   by resolving ActorRefs. This is especially useful in communicating processes across nodes.
 
 ** go's implementation of CSP
-+ Some useful CSP concepts are not implemented.
-For instance, pipes (like Unix pipes, but for CSPs), subordinate (like subroutines, but for CSPs)
++ Some useful CSP concepts are not implemented, for instance, pipes (like Unix pipes, but for CSPs), subordinate (like subroutines, but for CSPs).
 + Channels are not associated with processes.
 + Formal verification is not used, e.g. formally verifying dead lock free.
