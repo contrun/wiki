@@ -1,0 +1,27 @@
+:PROPERTIES:
+:ID:       43577fa0-c4da-4418-bcdb-7de3c622c5fe
+:END:
+#+title: linux scheduling optimization
+
+* controlling scheduling policy with cgroup
+
++ [[https://docs.kernel.org/scheduler/sched-design-CFS.html#group-scheduler-extensions-to-cfs][CFS Scheduler]]
++ [[https://www.kernel.org/doc/html/latest/scheduler/sched-bwc.html][CFS Bandwidth Control]]
+
+* hooking into scheduling decisions with bpf
+
++ [[https://lwn.net/Articles/873244/][Controlling the CPU scheduler with BPF]]
+
+* moving scheduling to userspace
+
++ [[https://dl.acm.org/doi/10.1145/3477132.3483542][ghOSt: Fast & Flexible User-Space Delegation of Linux Scheduling]]
+
+* fixing existing scheduling algorithm bugs
+
++ [[https://lwn.net/Articles/805317/][Fixing SCHED_IDLE]]
++ [[https://people.ece.ubc.ca/sasha/papers/eurosys16-final29.pdf][The Linux Scheduler: a Decade of Wasted Cores]]
+
+* creating new scheduling algorithms
+
++ [[https://www.kernel.org/doc/html/latest/scheduler/sched-energy.html][Energy Aware Scheduling]]
++ [[https://lwn.net/Articles/706374/][Scheduling for Android devices]]
