@@ -1,0 +1,363 @@
+:PROPERTIES:
+:ID:       4cdd791e-2639-4018-ab37-6265cf1a82d9
+:END:
+#+title: embedding bpf objects
+#+filetags: :systemd:bpftool:libbpf:bpf:
+
+* Too many open files
+I had trouble compiling. The nix builder failed with too many open files.
+#+begin_src shell
+find /proc -maxdepth 1 -type d -name '[0-9]*' \
+     -exec bash -c "ls {}/fd/ | wc -l | tr '\n' ' '" \; \
+     -printf "fds (PID = %P), command: " \
+     -exec bash -c "tr '\0' ' ' < {}/cmdline" \; \
+     -exec echo \; | sort -rn | head
+#+end_src
+showed systemd consumed more than 700 file descriptors on startup.
+I had a look at ~sudo lsof -p 1~, which told me there were hundreds of ~bpf-map~ and ~bpf-prog~.
+
+~sudo bpftool prog list~ showed the same bpf program ~7dc8126e8768ea37~ was loaded over and over.
+#+begin_src text
+5: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 4
+6: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 3
+9: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 8
+10: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 7
+11: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 10
+12: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 9
+15: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 14
+...
+48: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 2
+49: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 1
+50: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 6
+51: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 5
+52: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 46
+53: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 45
+54: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 48
+55: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 47
+56: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 50
+57: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 49
+58: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 52
+59: cgroup_skb  tag 7dc8126e8768ea37  gpl
+        loaded_at 2022-03-17T17:22:00+0800  uid 0
+        xlated 312B  jited 192B  memlock 4096B  map_ids 51
+...
+#+end_src
+
+In fact, every cgroup under the sun was attached with this program.
+~sudo bpftool cgroup tree~ returned
+
+#+begin_src text
+CgroupPath
+ID       AttachType      AttachFlags     Name
+/sys/fs/cgroup
+49       ingress         multi
+48       egress          multi
+/sys/fs/cgroup/sys-fs-fuse-connections.mount
+    55       ingress         multi
+    54       egress          multi
+/sys/fs/cgroup/sys-kernel-config.mount
+    57       ingress         multi
+    56       egress          multi
+/sys/fs/cgroup/sys-kernel-debug.mount
+    24       ingress         multi
+    23       egress          multi
+/sys/fs/cgroup/dev-mqueue.mount
+    20       ingress         multi
+    19       egress          multi
+/sys/fs/cgroup/user.slice
+    190      ingress         multi
+    189      egress          multi
+...
+#+end_src
+
+Moreover,
+#+begin_src shell
+   find /nix/store/24ljibki63lxk0m11qnw8fh9smh64g3x-systemd-249.7 -name '*bpf*'
+#+end_src
+returned nothing. So, where did systemd's bpf object files go?
+
+* Hunting for systemd's lost bpf object files
+
+** Hints from systemd
+The only reference to ~cgroup_skb~ in systemd is [[https://github.com/systemd/systemd/blob/dc131951b5f903b698f624a0234560d7a822ff21/src/core/bpf/restrict_ifaces/restrict-ifaces.bpf.c#L42-L50][restrict-ifaces.bpf.c]], whose caller [[https://github.com/systemd/systemd/blob/2979c852a4e9fc5820a7c1d2bca5e23651b47289/src/core/restrict-ifaces.c][restrict-ifaces.c]]
+never explicitly loads any bpf programs.
+
+However, the bpf entry point to restrict cgroup egress access ~sd_restrictif_e~
+is referenced in the line [[https://github.com/systemd/systemd/blob/2979c852a4e9fc5820a7c1d2bca5e23651b47289/src/core/restrict-ifaces.c#L136][~ingress_link = sym_bpf_program__attach_cgroup(obj->progs.sd_restrictif_i, cgroup_fd);~]],
+~sym_bpf_program__attach_cgroup~'s definition is nowhere to be found,
+but [[https://github.com/systemd/systemd/blob/2979c852a4e9fc5820a7c1d2bca5e23651b47289/src/core/restrict-ifaces.c][restrict-ifaces.c]] included a non-existent file ~bpf/restrict_ifaces/restrict-ifaces-skel.h~.
+With some further digging, I found out it is generated by the script [[https://github.com/systemd/systemd/commit/cf4f9a57f20f1b21d59574e1f0cb6504506f1728][tools/build-bpf-skel.py]].
+Under the hood, it uses bpftool and libbpf's code generation support.
+The generated code can be used directly in the normal c programs. It also exposes functions to load bpf programs.
+The code generation is added in the commit [[https://lwn.net/Articles/806911/][Add code-generated BPF object skeleton support]].
+
+Before we dive into how libbpf and bpftool generate skeleton code, how they embed the bpf programs into the elf binary and how
+are bpf programs loaded on demand, let's inspect a simpler program, [[https://github.com/libbpf/libbpf-bootstrap/blob/d6f8b82aed0f924ff63fd30f8d0aebeac92af5ad/examples/c/uprobe.c][uprobe]] from [[https://github.com/libbpf/libbpf-bootstrap][libbpf-bootstrap]],
+which also embeds bpf programs with libbpf and bpftool.
+
+** Where are the bpf programs located in the memory?
+One possibility is, bpf programs are, like dynamic libraries, mmaped into ~uprobe~'s memory space.
+If this is the case, we need to find out the memory region of the bpf programs, and which file they are mapped from.
+
+Let's use ~bpftrace~ to trace the instructions passed to ~bpf(2)~.
+
+We run ~sudo bpftrace bpf_prog_load.bt~ where ~bpf_prog_load.bt~ has the following contents.
+
+#+begin_src bpftrace
+// The struct fields is copied from
+// https://github.com/torvalds/linux/blob/ed4643521e6af8ab8ed1e467630a85884d2696cf/include/uapi/linux/bpf.h#L1314-L1349
+// __aligned_u64 is changed to __u64.
+struct BpfProgAttr { /* anonymous struct used by BPF_PROG_LOAD command */
+  __u32   prog_type;  /* one of enum bpf_prog_type */
+  __u32   insn_cnt;
+  __u64   insns;
+  __u64   license;
+  __u32   log_level;  /* verbosity level of verifier */
+  __u32   log_size; /* size of user buffer */
+  __u64   log_buf;  /* user supplied buffer */
+  __u32   kern_version; /* not used */
+  __u32   prog_flags;
+  char    prog_name[16u];
+  __u32   prog_ifindex; /* ifindex of netdev */
+};
+
+// bpf_prog_load's signature is
+// static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
+kprobe:bpf_prog_load {
+  printf("bpf_prog_load\n");
+  $ptr = (struct BpfProgAttr *) arg0;
+  printf("pid: %d\n", pid);
+  printf("comm: %s\n", comm);
+  printf("attr address: %p\n", $ptr);
+  printf("instruction size: %d\n", $ptr->insn_cnt);
+  printf("instruction address: %p\n", $ptr->insns);
+  printf("prog name: %s\n", $ptr->prog_name);
+  printf("prog type: %d\n", $ptr->prog_type);
+  printf("prog index: %d\n", $ptr->prog_ifindex);
+  printf("\n")
+}
+
+// This bpftrace snippet does not seem to work.
+// bpf_sys_bpf is the bpf syscall, whose signature is
+// BPF_CALL_3(bpf_sys_bpf, int, cmd, void *, attr, u32, attr_size)
+kprobe:bpf_sys_bpf {
+  // 3 is BPF_PROG_LOAD
+  if (arg0 == 3) {
+    printf("bpf_sys_bpf\n");
+    $ptr = (struct BpfProgAttr *) arg1;
+    printf("pid: %d\n", pid);
+    printf("comm: %s\n", comm);
+    printf("attr address: %p\n", $ptr);
+    printf("instruction size: %d\n", $ptr->insn_cnt);
+    printf("instruction address: %p\n", $ptr->insns);
+    printf("prog name: %s\n", $ptr->prog_name);
+    printf("prog type: %d\n", $ptr->prog_type);
+    printf("prog index: %d\n", $ptr->prog_ifindex);
+    printf("\n")
+  }
+}
+#+end_src
+
+After running a new ~uprobe~ process, the following results are printed on the screen
+
+#+begin_src text
+bpf_prog_load
+pid: 2509841
+comm: uprobe
+attr address: 0xffffb98bc0ec3e68
+instruction size: 2
+instruction address: 0x7fff753d7bc0
+prog name: test
+prog type: 1
+prog index: 0
+
+bpf_prog_load
+pid: 2509841
+comm: uprobe
+attr address: 0xffffb98bc0ec3e68
+instruction size: 8
+instruction address: 0x1bcac40
+prog name: uprobe
+prog type: 2
+prog index: 0
+
+bpf_prog_load
+pid: 2509841
+comm: uprobe
+attr address: 0xffffb98bc0ec3e68
+instruction size: 2
+instruction address: 0x7fff753d7b90
+prog name:
+prog type: 1
+prog index: 0
+
+bpf_prog_load
+pid: 2509841
+comm: uprobe
+attr address: 0xffffb98bc0ec3e68
+instruction size: 7
+instruction address: 0x1bcaf20
+prog name: uretprobe
+prog type: 2
+prog index: 0
+#+end_src
+
+where ~0x1bcac40~ and ~0x1bcaf20~ are the programs loaded into the bpf vm.
+Let's check out where those programs came from.
+
+We attach the program to a gdb session with ~sudo gdb attach -p $(pgrep '^uprobe$')~.
+We then run ~info proc mappings~ to view the memory lay out of the program ~uprobe~.
+
+#+begin_src text
+           0x1bc9000          0x1bea000    0x21000        0x0 [heap]
+#+end_src
+
+To much of my disappointment, these two bpf programs are in the heap, not in some mmaped files.
+
+Actually, carefully inspecting ~sudo cat /proc/$(pgrep '^uprobe$')/maps~ will show there are no extra mapped files
+which could include the bpf programs.
+
+** The embedded bpf object
+
+Following libbpf-boostrap's instruction, we build ~uprobe~ with a side effect of generating
+a file ~uprobe.skel.h~ which contains a snippet
+
+#+begin_src c
+  static inline const void *uprobe_bpf__elf_bytes(size_t *sz)
+  {
+          ,*sz = 3304;
+          return (const void *)"\
+  \x7f\x45\x4c\x46\x02\x01\x01\0\0\0\0\0\0\0\0\0\x01\0\xf7\0\x01\0\0\0\0\0\0\0\0\
+  ......
+  \0\0\0\0\0\0\0\0\0\0\0\xe8\x08\0\0\0\0\0\0\0\0\0\0\x40\0\0\0\0\0\x40\0\x10\0\
+  \0\0\0\0\0\0\x87\0\0\0\x03\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x38\x08\0\0\0\
+  \0\0\0\xb0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x01\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+  }
+#+end_src
+
+Eureka! This is the bpf program. Look at the head of this file. ~\x7f\x45\x4c\x46~ is
+the magic number for ELF files.
+
+For better understanding of what this array does, we dump it to a file with the following c program.
+
+#+begin_src c
+#include "uprobe.skel.h"
+#include <stdio.h>
+
+void writeBpfObjectToFile(char filename[80]) {
+  FILE *fp = fopen(filename, "wb");
+  size_t size = 0;
+  const void *p = uprobe_bpf__elf_bytes(&size);
+  int r = fwrite(p, 1, size, fp);
+  fclose(fp);
+}
+
+int main(int argc, char **argv) {
+  writeBpfObjectToFile(argv[1]);
+  return 0;
+}
+#+end_src
+
+I compile it with
+
+#+begin_src shell
+clang -g -I.output -I../../libbpf/include/uapi -I../../vmlinux/x86/ -idirafter /nix/store/zhykg9kkhyb6mb47p1mw7pyz847ll5b4-libelf-0.8.13/include -idirafter /nix/store/1my9xr1s1nfjmqwyi46pzdrvny7hm66x-zlib-1.2.11-dev/include -idirafter /nix/store/0sk7aa616ihk43r8fmc770s5vr9nqwij-clang-wrapper-13.0.0/resource-root/include -idirafter /nix/store/vccvfa5bjb9dv4x6zq5gjf1yp58y4brg-glibc-2.33-108-dev/include -I /home/e/.nix-profile/include -I /run/current-system/sw/include -I /home/e/.nix-profile/include -I /run/current-system/sw/include -I /home/e/.nix-profile/include -I /run/current-system/sw/include -o uprobe_save uprobe_save.c
+#+end_src
+
+Your mileage may vary. I save the data to ~bpf_program.o~ with ~./uprobe_save bpf_program.o~. It is indeed a valid ELF file.
+Moreover, we can load it with ~sudo bpftool prog load bpf_program.o /sys/fs/bpf/bpf_program~
+A warning is printed.
+
+#+begin_src text
+libbpf: elf: skipping unrecognized data section(8) .eh_frame
+libbpf: elf: skipping relo section(14) .rel.eh_frame for section(8) .eh_frame
+#+end_src
+It is my guessing that this bpf object actually contains two bpf programs. The loader of bpftool may be not able to properly handle this.
+
+We see ~sudo bpftool prog list~ now list a new program ~uprobe~ with an old tag ~2a8c45c2f0e905b1~.
+
+#+begin_src text
+330: kprobe  name uprobe  tag 2a8c45c2f0e905b1  gpl
+        loaded_at 2022-03-24T14:13:16+0800  uid 0
+        xlated 64B  jited 43B  memlock 4096B  map_ids 97
+        btf_id 464
+332: kprobe  name uretprobe  tag 10e060f1f65ee396  gpl
+        loaded_at 2022-03-24T14:13:16+0800  uid 0
+        xlated 56B  jited 39B  memlock 4096B  map_ids 97
+        btf_id 464
+372: kprobe  name uprobe  tag 2a8c45c2f0e905b1  gpl
+        loaded_at 2022-03-24T17:03:12+0800  uid 0
+        xlated 64B  jited 43B  memlock 4096B  map_ids 121
+        btf_id 497
+#+end_src
+
+We can now be sure the array returned from ~uprobe_bpf__elf_bytes~ is indeed the long-hunted bpf object.
+Note that the program ~uretprobe~ is not loaded. The reason may still be bpftool ELF loader's inability to detect multiple programs.
+It is just not designed to work this way.
+
+Now that the bpf object is saved as a hard-coded ~const void *~, we may find it somewhere in the generated binary.
+~binwalk uprobe~ shows there is a
+#+begin_src text
+172168        0x2A088         ELF, 64-bit LSB relocatable, version 1 (SYSV)
+#+end_src
+We can extract it to a separated file with ~binwalk --extract tmp ./uprobe~.
+~file tmp/_uprobe.extracted/2A088.o~ shows it is a "ELF 64-bit LSB relocatable, eBPF, version 1 (SYSV), not stripped".
+~tmp/_uprobe.extracted/2A088.o~ may contain some extra bytes. To obtain an identical object file,
+we can run ~dd if=uprobe of=bpf_program_extracted.o bs=1 skip=172168 count=3304~ where ~172168~ is the start offset obtained from ~binwalk~,
+~3304~ is the size obtained from inspecting function ~uprobe_bpf__elf_bytes~ in the skeleton code.
+We can verify this by running ~sha512sum tmp/_uprobe.extracted/2A088.o bpf_program.o bpf_program_extracted.o~.
+#+begin_src text
+853e4b8c5560ecd40d465792f4777c75c6c117a797b2a1e558ef83dbb36dccdaa62a192a96bc2bb03bd5501f0d5b0007609beb0ba177a076492b189c5bf80a03  tmp/_uprobe.extracted/2A088.o
+79ee4b9a85cec9bda9351936cbae4f8a879f87a7b7afd7108ffae74fe95691fd1828d20380d71b0ae5b5cbb935548fa57ed4555143fa72b811f4ba70e92914eb  bpf_program.o
+79ee4b9a85cec9bda9351936cbae4f8a879f87a7b7afd7108ffae74fe95691fd1828d20380d71b0ae5b5cbb935548fa57ed4555143fa72b811f4ba70e92914eb  bpf_program_extracted.o
+#+end_src
+
+Now the conclusion is clear. ~bpftool gen sketelon~ generates a skeleton code which contains a hard-coded bpf object. The compiler and linker
+save this to the ~.rodata~ section (~const void *~) of the final binary. From the point of view of an ordinary C function, bpf object is just another ordinary pointer.
+It is also clear that, we have no reliable way to extract bpf objects from elf files as embedding details depend on implementation.
+Different compilers and linkers may have different behaviour, e.g. the position within ~.rodata~ can not be determined easily.
+The best take is using ~binwalk~. Fortunately the extraneous bytes in the resulting binary do not really matter.
+
+** TODO How is the bpf object loaded and all the other things bpf programs need?
+For now, see [[https://lkml.kernel.org/netdev/20191213223214.2791885-1-andriin@fb.com/t/][[PATCH v3 bpf-next 00/17] Add code-generated BPF object skeleton support]].
+
+* Addendum
++ The nix compiling failure is because of per process file limit.
++ The attached bpf program for all cgroups is systemd's IP accounting program.
++ Both options can be tuned in ~/etc/systemd/system.conf~, see [[https://www.man7.org/linux/man-pages/man5/systemd-system.conf.5.html][systemd-system.conf(5)]] for details.
