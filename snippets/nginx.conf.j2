@@ -1,0 +1,56 @@
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+stream {
+    log_format format '$remote_addr [$time_iso8601] '
+                     '$protocol $status $bytes_sent $bytes_received '
+                     '$session_time "$upstream_addr" '
+                     '"$upstream_bytes_sent" "$upstream_bytes_received" "$upstream_connect_time"';
+    access_log  /var/log/nginx/access.log format;
+
+    map $ssl_preread_server_name $ssl_backend {
+        ~^([^.]+\.)*alias\.[^.]+\.[^.]+$   real-server:$server_port;
+        ~^([^.]+\.)*(?P<my_hostname>[^.]+)\.[^.]+\.[^.]+$   $my_hostname:$server_port;
+        default default-server:$server_port;
+    }
+
+    map $hostname $backend {
+        ~^([^.]+\.)*alias\.[^.]+\.[^.]+$   real-server:$server_port;
+        ~^([^.]+\.)*(?P<my_hostname>[^.]+)\.[^.]+\.[^.]+$   $my_hostname:$server_port;
+        default $ssl_backend;
+    }
+
+    resolver 127.0.0.53 ipv6=off;
+
+    server {
+        listen 0.0.0.0:80 reuseport;
+        listen 0.0.0.0:2022 reuseport;
+        listen 0.0.0.0:2122 reuseport;
+        listen 0.0.0.0:2222 reuseport;
+        listen 0.0.0.0:443 reuseport;
+        listen 0.0.0.0:4443 reuseport;
+        listen 0.0.0.0:4000 reuseport;
+        listen 0.0.0.0:5678 reuseport;
+        listen 0.0.0.0:8080 reuseport;
+        listen 0.0.0.0:80 udp reuseport;
+        listen 0.0.0.0:2022 udp reuseport;
+        listen 0.0.0.0:2122 udp reuseport;
+        listen 0.0.0.0:2222 udp reuseport;
+        listen 0.0.0.0:443 udp reuseport;
+        listen 0.0.0.0:4443 udp reuseport;
+        listen 0.0.0.0:4000 udp reuseport;
+        listen 0.0.0.0:5678 udp reuseport;
+        listen 0.0.0.0:8080 udp reuseport;
+        proxy_pass $backend;
+        proxy_protocol on;
+        ssl_preread on;
+    }
+}
