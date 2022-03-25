@@ -2,7 +2,7 @@
 :ID:       2e4ec310-908d-4aee-800e-af631f0967a5
 :END:
 #+title: lowering async await in rust
-#+filetags: :coroutine:llvm:code_generation:async_programming:rust:
+#+filetags: :generator:coroutine:llvm:code_generation:async_programming:rust:
 
 
 We have a simple program ([[https://play.rust-lang.org/?version=nightly&mode=debug&edition=2021&gist=91241061cec74bd633c22789f1ae1196][playground link]]) built with rust's async/await feature.

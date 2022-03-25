@@ -15,4 +15,7 @@ org/private/
 /.emacs.d
 /content/posts
 .env
+.env.decrypted
 /static/ox-hugo
+ltximg/
+*.organice-bak

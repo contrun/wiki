@@ -2,7 +2,7 @@
 :ID:       26a82b36-e049-470a-8f20-6b58cc7d2ba1
 :END:
 #+title: sigma bullets
-#+filetags: :zero_knowledge_proofs:
+#+filetags: :cryptography:zero_knowledge_proofs:
 * Introduction
 This document summarize how a zero-knowledge confidential transaction scheme works and how to implement it. A confidential transaction scheme is a transaction scheme with which the transaction value and the balance of the sender and receiver are encrypted. The zero-knowledge part means that outsider can effectively learn nothing about the values, although he can verify the transaction is not fabricated. The main references are [[https://eprint.iacr.org/2017/1066][Bulletproofs]] and [[https://eprint.iacr.org/2019/191][Zether]]. We use Zether to homomorphically encrypt the transaction value so that the we can directly add/subtract ciphertext of the encrypted balance which can then be decrypted into the correct balance after the transaction. We use bulletproofs to check the transaction value is valid, i.e. it is a non-negative number within the range \([0, 2^n)\), and after the transaction the sender must still have a non-negative balance. The vanilla bulletproofs do not apply to the scenario of zether as Elgamal commitments are not fully homomorphic. We need to tweak bulletproofs to support \(\Sigma\)-protocols, i.e. interactive proof of the values commited in Bulletproofs are truly the values involved in zether, whence we obtain a complete and sound proof of a confidential transaction.
 
