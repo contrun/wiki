@@ -7,14 +7,7 @@
 
 We have a simple program ([[https://play.rust-lang.org/?version=nightly&mode=debug&edition=2021&gist=91241061cec74bd633c22789f1ae1196][playground link]]) built with rust's async/await feature.
 
-#+begin_src rust
-use tokio::time::{sleep, Duration};
-
-#[tokio::main]
-async fn main() {
-    sleep(Duration::from_secs(1)).await;
-}
-#+end_src
+#+INCLUDE: ./assets/snippets/lowering_async_await/src/sleep1.rs src rust
 
 We want to understand all the magic rust compiler did to make this come to life.
 Here are a few references:
@@ -35,7 +28,7 @@ We will dive into the code generation process of async/await in a moment.
 
 Let's first try to expand all the macros with [[https://github.com/dtolnay/cargo-expand][cargo-expand]].
 
-#+begin_src
+#+begin_src text
 > cargo expand
     Checking libc v0.2.112
     Checking log v0.4.14
@@ -154,7 +147,7 @@ Below is its comment.
                 ::std::task::Poll::Ready(result) => break result,
                 ::std::task::Poll::Pending => {}
             }
-            task_context = yield ();
+            task_context = yield ();sb
         }
     }
     ```
@@ -197,150 +190,7 @@ Frequently it is implemented with [[https://en.wikipedia.org/wiki/Setjmp.h][~set
 Let's go lower to [[https://rustc-dev-guide.rust-lang.org/mir/index.html][Rust's Mid-level Intermediate Representation (MIR)]] with ~RUSTFLAGS="--emit mir" cargo -v run~.
 Below is MIR of the generated coroutine of the async main function (found in the path ~target/debug/deps/*.mir~).
 
-#+begin_src rust-mir
-fn main::{closure#0}(_1: Pin<&mut [static generator@src/main.rs:4:17: 6:2]>, _2: ResumeTy) -> GeneratorState<(), ()> {
-    debug _task_context => _18;          // in scope 0 at src/main.rs:4:17: 6:2
-    let mut _0: std::ops::GeneratorState<(), ()>; // return place in scope 0 at src/main.rs:4:17: 6:2
-    let mut _3: tokio::time::Sleep;      // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _4: tokio::time::Sleep;      // in scope 0 at src/main.rs:5:5: 5:34
-    let mut _5: std::time::Duration;     // in scope 0 at src/main.rs:5:11: 5:33
-    let mut _6: std::task::Poll<()>;     // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _7: std::pin::Pin<&mut tokio::time::Sleep>; // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _8: &mut tokio::time::Sleep; // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _9: &mut tokio::time::Sleep; // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _10: &mut std::task::Context; // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _11: &mut std::task::Context; // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _12: std::future::ResumeTy;  // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _13: isize;                  // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _15: std::future::ResumeTy;  // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _16: ();                     // in scope 0 at src/main.rs:5:34: 5:40
-    let mut _17: ();                     // in scope 0 at src/main.rs:4:17: 6:2
-    let mut _18: std::future::ResumeTy;  // in scope 0 at src/main.rs:4:17: 6:2
-    let mut _19: u32;                    // in scope 0 at src/main.rs:4:17: 6:2
-    scope 1 {
-        debug pinned => (((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2])) as variant#3).0: tokio::time::Sleep); // in scope 1 at src/main.rs:5:34: 5:40
-        let _14: ();                     // in scope 1 at src/main.rs:5:34: 5:40
-        scope 2 {
-        }
-        scope 3 {
-            debug result => _14;         // in scope 3 at src/main.rs:5:34: 5:40
-        }
-    }
-
-    bb0: {
-        _19 = discriminant((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2]))); // scope 0 at src/main.rs:4:17: 6:2
-        switchInt(move _19) -> [0_u32: bb1, 1_u32: bb17, 2_u32: bb16, 3_u32: bb15, otherwise: bb18]; // scope 0 at src/main.rs:4:17: 6:2
-    }
-
-    bb1: {
-        _18 = move _2;                   // scope 0 at src/main.rs:4:17: 6:2
-        _5 = Duration::from_secs(const 1_u64) -> [return: bb2, unwind: bb14]; // scope 0 at src/main.rs:5:11: 5:33
-                                         // mir::Constant
-                                         // + span: src/main.rs:5:11: 5:30
-                                         // + literal: Const { ty: fn(u64) -> std::time::Duration {std::time::Duration::from_secs}, val: Value(Scalar(<ZST>)) }
-    }
-
-    bb2: {
-        _4 = tokio::time::sleep(move _5) -> [return: bb3, unwind: bb14]; // scope 0 at src/main.rs:5:5: 5:34
-                                         // mir::Constant
-                                         // + span: src/main.rs:5:5: 5:10
-                                         // + literal: Const { ty: fn(std::time::Duration) -> tokio::time::Sleep {tokio::time::sleep}, val: Value(Scalar(<ZST>)) }
-    }
-
-    bb3: {
-        _3 = <Sleep as IntoFuture>::into_future(move _4) -> [return: bb4, unwind: bb14]; // scope 0 at src/main.rs:5:34: 5:40
-                                         // mir::Constant
-                                         // + span: src/main.rs:5:34: 5:40
-                                         // + literal: Const { ty: fn(tokio::time::Sleep) -> <tokio::time::Sleep as std::future::IntoFuture>::Future {<tokio::time::Sleep as std::future::IntoFuture>::into_future}, val: Value(Scalar(<ZST>)) }
-    }
-
-    bb4: {
-        (((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2])) as variant#3).0: tokio::time::Sleep) = move _3; // scope 0 at src/main.rs:5:34: 5:40
-        goto -> bb5;                     // scope 1 at src/main.rs:5:34: 5:40
-    }
-
-    bb5: {
-        _9 = &mut (((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2])) as variant#3).0: tokio::time::Sleep); // scope 2 at src/main.rs:5:34: 5:40
-        _8 = &mut (*_9);                 // scope 2 at src/main.rs:5:34: 5:40
-        _7 = Pin::<&mut Sleep>::new_unchecked(move _8) -> [return: bb6, unwind: bb13]; // scope 2 at src/main.rs:5:34: 5:40
-                                         // mir::Constant
-                                         // + span: src/main.rs:5:34: 5:40
-                                         // + literal: Const { ty: unsafe fn(&mut tokio::time::Sleep) -> std::pin::Pin<&mut tokio::time::Sleep> {std::pin::Pin::<&mut tokio::time::Sleep>::new_unchecked}, val: Value(Scalar(<ZST>)) }
-    }
-
-    bb6: {
-        _12 = _18;                       // scope 2 at src/main.rs:5:34: 5:40
-        _11 = get_context(move _12) -> [return: bb7, unwind: bb13]; // scope 2 at src/main.rs:5:34: 5:40
-                                         // mir::Constant
-                                         // + span: src/main.rs:5:34: 5:40
-                                         // + literal: Const { ty: unsafe fn(std::future::ResumeTy) -> &mut std::task::Context {std::future::get_context}, val: Value(Scalar(<ZST>)) }
-    }
-
-    bb7: {
-        _10 = &mut (*_11);               // scope 2 at src/main.rs:5:34: 5:40
-        _6 = <Sleep as Future>::poll(move _7, move _10) -> [return: bb8, unwind: bb13]; // scope 2 at src/main.rs:5:34: 5:40
-                                         // mir::Constant
-                                         // + span: src/main.rs:5:34: 5:40
-                                         // + literal: Const { ty: for<'r, 's, 't0> fn(std::pin::Pin<&'r mut tokio::time::Sleep>, &'s mut std::task::Context<'t0>) -> std::task::Poll<<tokio::time::Sleep as std::future::Future>::Output> {<tokio::time::Sleep as std::future::Future>::poll}, val: Value(Scalar(<ZST>)) }
-    }
-
-    bb8: {
-        _13 = discriminant(_6);          // scope 1 at src/main.rs:5:34: 5:40
-        switchInt(move _13) -> [0_isize: bb11, 1_isize: bb9, otherwise: bb10]; // scope 1 at src/main.rs:5:34: 5:40
-    }
-
-    bb9: {
-        ((_0 as Yielded).0: ()) = move _16; // scope 1 at src/main.rs:5:34: 5:40
-        discriminant(_0) = 0;            // scope 1 at src/main.rs:5:34: 5:40
-        discriminant((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2]))) = 3; // scope 1 at src/main.rs:5:34: 5:40
-        return;                          // scope 1 at src/main.rs:5:34: 5:40
-    }
-
-    bb10: {
-        unreachable;                     // scope 1 at src/main.rs:5:34: 5:40
-    }
-
-    bb11: {
-        _14 = ((_6 as Ready).0: ());     // scope 1 at src/main.rs:5:34: 5:40
-        drop((((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2])) as variant#3).0: tokio::time::Sleep)) -> [return: bb12, unwind: bb14]; // scope 0 at src/main.rs:5:39: 5:40
-    }
-
-    bb12: {
-        _17 = const ();                  // scope 0 at src/main.rs:4:17: 6:2
-        ((_0 as Complete).0: ()) = move _17; // scope 0 at src/main.rs:6:2: 6:2
-        discriminant(_0) = 1;            // scope 0 at src/main.rs:6:2: 6:2
-        discriminant((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2]))) = 1; // scope 0 at src/main.rs:6:2: 6:2
-        return;                          // scope 0 at src/main.rs:6:2: 6:2
-    }
-
-    bb13 (cleanup): {
-        drop((((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2])) as variant#3).0: tokio::time::Sleep)) -> bb14; // scope 0 at src/main.rs:5:39: 5:40
-    }
-
-    bb14 (cleanup): {
-        discriminant((*(_1.0: &mut [static generator@src/main.rs:4:17: 6:2]))) = 2; // scope 0 at src/main.rs:4:17: 6:2
-        resume;                          // scope 0 at src/main.rs:4:17: 6:2
-    }
-
-    bb15: {
-        _15 = move _2;                   // scope 0 at src/main.rs:4:17: 6:2
-        _18 = move _15;                  // scope 1 at src/main.rs:5:34: 5:40
-        goto -> bb5;                     // scope 1 at src/main.rs:5:34: 5:40
-    }
-
-    bb16: {
-        assert(const false, "`async fn` resumed after panicking") -> bb16; // scope 0 at src/main.rs:4:17: 6:2
-    }
-
-    bb17: {
-        assert(const false, "`async fn` resumed after completion") -> bb17; // scope 0 at src/main.rs:4:17: 6:2
-    }
-
-    bb18: {
-        unreachable;                     // scope 0 at src/main.rs:4:17: 6:2
-    }
-}
-#+end_src
+#+INCLUDE: ./assets/snippets/lowering_async_await/src/sleep1.mir src rust-mir
 
 We can generate a control flow graph of the generated coroutine with
 ~RUSTFLAGS="-Z dump-mir=main -Z dump-mir-graphviz -Z dump-mir-dataflow -Z dump-mir-spanview --emit=mir" cargo -v run~.
@@ -360,18 +210,7 @@ The entry point of this generated coroutine is basic block ~bb0~ (the block 0 in
 The current state is a ~enum~, whose branches are identified by the discriminants, tags prepended to the actual payload.
 Below is a llvm itermediate representation to obtain a discriminant.
 
-#+begin_src llir
-   %7 = bitcast i64* %_1 to %"[static generator@src/main.rs:4:17: 6:2]"*, !dbg !2665
-   %8 = getelementptr inbounds %"[static generator@src/main.rs:4:17: 6:2]", %"[static generator@src/main.rs:4:17: 6:2]"* %7, i32 0, i32 1, !dbg !2665
-   %9 = load i8, i8* %8, align 128, !dbg !2665, !range !2623
-   %_19 = zext i8 %9 to i32, !dbg !2665
-   switch i32 %_19, label %bb18 [
-     i32 0, label %bb1
-     i32 1, label %bb17
-     i32 2, label %bb16
-     i32 3, label %bb15
-   ], !dbg !2665
-#+end_src
+#+INCLUDE: ./assets/snippets/lowering_async_await/src/sleep1.ll src llir :lines 1388-1393
 
 Our program decides jumping to which basic block based on the state's current discriminant.
 For example, when the discriminant is 0, the program jumps to ~bb1~.
@@ -461,46 +300,7 @@ Fortunately, it's quite simple to convert a generator to a future.
 
 The [[https://github.com/rust-lang/rust/blob/3ee016ae4d4c6ee4a34faa2eb7fdae2ffa7c9b46/library/core/src/future/mod.rs#L55-L92][from_generator]] function does exactly this.
 
-#+begin_src rust
-/// Wrap a generator in a future.
-///
-/// This function returns a `GenFuture` underneath, but hides it in `impl Trait` to give
-/// better error messages (`impl Future` rather than `GenFuture<[closure.....]>`).
-// This is `const` to avoid extra errors after we recover from `const async fn`
-#[lang = "from_generator"]
-#[doc(hidden)]
-#[unstable(feature = "gen_future", issue = "50547")]
-#[rustc_const_unstable(feature = "gen_future", issue = "50547")]
-#[inline]
-pub const fn from_generator<T>(gen: T) -> impl Future<Output = T::Return>
-where
-    T: Generator<ResumeTy, Yield = ()>,
-{
-    #[rustc_diagnostic_item = "gen_future"]
-    struct GenFuture<T: Generator<ResumeTy, Yield = ()>>(T);
-
-    // We rely on the fact that async/await futures are immovable in order to create
-    // self-referential borrows in the underlying generator.
-    impl<T: Generator<ResumeTy, Yield = ()>> !Unpin for GenFuture<T> {}
-
-    impl<T: Generator<ResumeTy, Yield = ()>> Future for GenFuture<T> {
-        type Output = T::Return;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            // SAFETY: Safe because we're !Unpin + !Drop, and this is just a field projection.
-            let gen = unsafe { Pin::map_unchecked_mut(self, |s| &mut s.0) };
-
-            // Resume the generator, turning the `&mut Context` into a `NonNull` raw pointer. The
-            // `.await` lowering will safely cast that back to a `&mut Context`.
-            match gen.resume(ResumeTy(NonNull::from(cx).cast::<Context<'static>>())) {
-                GeneratorState::Yielded(()) => Poll::Pending,
-                GeneratorState::Complete(x) => Poll::Ready(x),
-            }
-        }
-    }
-
-    GenFuture(gen)
-}
-#+end_src
+#+INCLUDE: ./assets/snippets/lowering_async_await/src/from_generator.rs src rust
 
 As we can see, what the ~poll~ function for a generator future does is essentially data conversion.
 One delicate yet crucial matter is the before-mentioned parameter ~task_context~.

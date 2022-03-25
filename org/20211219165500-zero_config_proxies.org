@@ -51,25 +51,8 @@ For a working script to manipulate iptables, see [[https://github.com/contrun/do
 The traffic is transparently redirected to the proxy server. The tproxy server captures the traffic,
 and pretends to be the target server. It is quite easy for the tproxy server to get the original destination,
 as tproxy server's receiving socket is set to be of original destination.
-#+begin_src shell
-  iptables -t mangle -N CLASH_EXTERNAL
-  iptables -t mangle -A CLASH_EXTERNAL -d 0.0.0.0/8 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 127.0.0.0/8 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 224.0.0.0/4 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 172.16.0.0/12 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 169.254.0.0/16 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 240.0.0.0/4 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 192.168.0.0/16 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 10.0.0.0/8 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 100.64.0.0/10 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -d 255.255.255.255 -j RETURN
-  iptables -t mangle -A CLASH_EXTERNAL -p tcp -j TPROXY --on-port "$CLASH_TPROXY_PORT" --on-ip 127.0.0.1 --tproxy-mark "$CLASH_MARK"
-  iptables -t mangle -I PREROUTING -p tcp -j CLASH_EXTERNAL
-  if [[ -z "$(ip rule list fwmark "$CLASH_MARK" table "$CLASH_TABLE")" ]]; then
-      ip rule add fwmark "$CLASH_MARK" table "$CLASH_TABLE"
-  fi
-  ip route replace local 0.0.0.0/0 dev lo table "$CLASH_TABLE"
-#+end_src
+
+#+INCLUDE: ./assets/snippets/iptables_tproxy.sh src shell
 
 A few notes:
 + The above script makes all TCP traffic to be tproxied to ~127.0.0.1:$CLASH_TPROXY_PORT~.
@@ -81,37 +64,8 @@ Running ~iptables-save -c | grep -v CLASH_ | iptables-restore -c~ is enough.
 *** redirect
 Iptables redirect just redirects the traffic to the target server. The original server could be a normal server (say a normal HTTP server),
 or a proxy (say a socks5 proxy which would then forward the traffic to socks5 proxy server).
-#+begin_src shell
-  iptables -t nat -N CLASH_LOCAL
-  iptables -t nat -A CLASH_LOCAL -m owner --uid-owner "$CLASH_USER" -j RETURN
-  iptables -t nat -A CLASH_LOCAL -m owner --gid-owner "$NOPROXY_GROUP" --suppl-groups -j RETURN || true
-  iptables -t nat -A CLASH_LOCAL -d 0.0.0.0/8 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 127.0.0.0/8 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 224.0.0.0/4 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 172.16.0.0/12 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 169.254.0.0/16 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 240.0.0.0/4 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 192.168.0.0/16 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 10.0.0.0/8 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 100.64.0.0/10 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -d 255.255.255.255 -j RETURN
-  iptables -t nat -A CLASH_LOCAL -p tcp -j REDIRECT --to-ports "$CLASH_REDIRECT_PORT"
-  iptables -t nat -I OUTPUT -p tcp -j CLASH_LOCAL
 
-  iptables -t nat -N CLASH_EXTERNAL
-  iptables -t nat -A CLASH_EXTERNAL -d 0.0.0.0/8 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 127.0.0.0/8 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 224.0.0.0/4 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 172.16.0.0/12 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 169.254.0.0/16 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 240.0.0.0/4 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 192.168.0.0/16 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 10.0.0.0/8 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 100.64.0.0/10 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -d 255.255.255.255 -j RETURN
-  iptables -t nat -A CLASH_EXTERNAL -p tcp -j REDIRECT --to-ports "$CLASH_REDIRECT_PORT"
-  iptables -t nat -I PREROUTING -p tcp -j CLASH_EXTERNAL
-#+end_src
+#+INCLUDE: ./assets/snippets/iptables_redirect.sh src shell
 
 A few notes:
 + Need to add rule for both ~PREROUTING~ and ~OUTPUT~ for local traffic and forwarding traffic.

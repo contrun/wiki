@@ -169,22 +169,9 @@ the hosts entry in nsswitch is too complicated. So it does not worth the effort 
 *** Coredns
 I found salvation in coredns. Here is how I resolve a domain name with coredns enriched by [[https://github.com/openshift/coredns-mdns][coredns-mdns]] and [[https://github.com/coredns/alternate][coredns-alternate]].
 The source code to this coredns instance is [[https://github.com/contrun/infra/blob/ac7d148e95d455b2fc64ddfbc8c2c343a19a06f7/coredns/main.go][here]].
-#+begin_src
-.:5355 {
-    template IN A mydomain.tld {
-      match ^(|[.])(?P<p>.*)\.(?P<s>(?P<h>.*?)\.(?P<d>mydomain.tld)[.])$
-      answer "{{ .Name }} 60 IN CNAME {{ if eq .Group.h `hub` }}hub_hostname{{ else }}{{ .Group.h }}{{ end }}.{{ .Group.d }}."
-      fallthrough
-    }
-    template IN AAAA mydomain.tld {
-      match ^(|[.])(?P<p>.*)\.(?P<s>(?P<h>.*?)\.(?P<d>mydomain.tld)[.])$
-      answer "{{ .Name }} 60 IN CNAME {{ if eq .Group.h `hub` }}hub_hostname{{ else }}{{ .Group.h }}{{ end }}.{{ .Group.d }}."
-      fallthrough
-    }
-    mdns mydomain.tld
-    alternate original NXDOMAIN,SERVFAIL,REFUSED . 1.0.0.1 8.8.4.4 9.9.9.9 180.76.76.76 223.5.5.5
-}
-#+end_src
+
+#+INCLUDE: ./assets/snippets/Corefile src
+
 The Corefile above does the following things.
 + cname ~*.hostname.mydomain.tld~ to ~hostname.mydomain.tld~
 + Let ~hostname.mydomain.tld~ be resolved to ~hostname.local~ by coredns-mdns
@@ -214,64 +201,9 @@ which backend server to forward traffic. This is less than ideal in my use case,
 (mDNS must be manually enabled for each interface, LLMNR seems to be easier to use), I can use easily resolve hostnames.
 All I need is obtaining a new hostname from the original hostname by a simple regex. I choose nginx over envoy to do that.
 Here is my nginx configuration.
-#+begin_src
-user  nginx;
-worker_processes  auto;
 
-error_log  /var/log/nginx/error.log notice;
-pid        /var/run/nginx.pid;
+#+INCLUDE: ./assets/snippets/nginx.conf.j2 src
 
-
-events {
-    worker_connections  1024;
-}
-
-stream {
-    log_format format '$remote_addr [$time_iso8601] '
-                     '$protocol $status $bytes_sent $bytes_received '
-                     '$session_time "$upstream_addr" '
-                     '"$upstream_bytes_sent" "$upstream_bytes_received" "$upstream_connect_time"';
-    access_log  /var/log/nginx/access.log format;
-
-    map $ssl_preread_server_name $ssl_backend {
-        ~^([^.]+\.)*alias\.[^.]+\.[^.]+$   real-server:$server_port;
-        ~^([^.]+\.)*(?P<my_hostname>[^.]+)\.[^.]+\.[^.]+$   $my_hostname:$server_port;
-        default default-server:$server_port;
-    }
-
-    map $hostname $backend {
-        ~^([^.]+\.)*alias\.[^.]+\.[^.]+$   real-server:$server_port;
-        ~^([^.]+\.)*(?P<my_hostname>[^.]+)\.[^.]+\.[^.]+$   $my_hostname:$server_port;
-        default $ssl_backend;
-    }
-
-    resolver 127.0.0.53 ipv6=off;
-
-    server {
-        listen 0.0.0.0:80 reuseport;
-        listen 0.0.0.0:2022 reuseport;
-        listen 0.0.0.0:2122 reuseport;
-        listen 0.0.0.0:2222 reuseport;
-        listen 0.0.0.0:443 reuseport;
-        listen 0.0.0.0:4443 reuseport;
-        listen 0.0.0.0:4000 reuseport;
-        listen 0.0.0.0:5678 reuseport;
-        listen 0.0.0.0:8080 reuseport;
-        listen 0.0.0.0:80 udp reuseport;
-        listen 0.0.0.0:2022 udp reuseport;
-        listen 0.0.0.0:2122 udp reuseport;
-        listen 0.0.0.0:2222 udp reuseport;
-        listen 0.0.0.0:443 udp reuseport;
-        listen 0.0.0.0:4443 udp reuseport;
-        listen 0.0.0.0:4000 udp reuseport;
-        listen 0.0.0.0:5678 udp reuseport;
-        listen 0.0.0.0:8080 udp reuseport;
-        proxy_pass $backend;
-        proxy_protocol on;
-        ssl_preread on;
-    }
-}
-#+end_src
 With this configuration, nginx can both forward http and https traffic based on TLS SNI and http hostname.
 ~$my_hostname~ here is resolved by systemd-resolved.
 I also added some aliases to simplify management of domain name prefixes which do not have a backing hostname.

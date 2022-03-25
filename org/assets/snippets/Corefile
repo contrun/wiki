@@ -1,0 +1,14 @@
+.:5355 {
+    template IN A mydomain.tld {
+      match ^(|[.])(?P<p>.*)\.(?P<s>(?P<h>.*?)\.(?P<d>mydomain.tld)[.])$
+      answer "{{ .Name }} 60 IN CNAME {{ if eq .Group.h `hub` }}hub_hostname{{ else }}{{ .Group.h }}{{ end }}.{{ .Group.d }}."
+      fallthrough
+    }
+    template IN AAAA mydomain.tld {
+      match ^(|[.])(?P<p>.*)\.(?P<s>(?P<h>.*?)\.(?P<d>mydomain.tld)[.])$
+      answer "{{ .Name }} 60 IN CNAME {{ if eq .Group.h `hub` }}hub_hostname{{ else }}{{ .Group.h }}{{ end }}.{{ .Group.d }}."
+      fallthrough
+    }
+    mdns mydomain.tld
+    alternate original NXDOMAIN,SERVFAIL,REFUSED . 1.0.0.1 8.8.4.4 9.9.9.9 180.76.76.76 223.5.5.5
+}
