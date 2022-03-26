@@ -210,7 +210,7 @@ The entry point of this generated coroutine is basic block ~bb0~ (the block 0 in
 The current state is a ~enum~, whose branches are identified by the discriminants, tags prepended to the actual payload.
 Below is a llvm itermediate representation to obtain a discriminant.
 
-#+INCLUDE: ./assets/snippets/lowering_async_await/src/sleep1.ll src llir :lines 1388-1393
+#+INCLUDE: ./assets/snippets/lowering_async_await/src/sleep1.ll :lines "1388-1395" src llir
 
 Our program decides jumping to which basic block based on the state's current discriminant.
 For example, when the discriminant is 0, the program jumps to ~bb1~.

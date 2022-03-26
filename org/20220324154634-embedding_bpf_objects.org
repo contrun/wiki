@@ -5,7 +5,7 @@
 #+filetags: :systemd:bpftool:libbpf:bpf:
 
 * Too many open files
-I had trouble compiling. The nix builder failed with too many open files.
+I had trouble compiling. The nix builder failed with "too many open files".
 #+begin_src shell
 find /proc -maxdepth 1 -type d -name '[0-9]*' \
      -exec bash -c "ls {}/fd/ | wc -l | tr '\n' ' '" \; \
@@ -129,10 +129,10 @@ The code generation is added in the commit [[https://lwn.net/Articles/806911/][A
 
 Before we dive into how libbpf and bpftool generate skeleton code, how they embed the bpf programs into the elf binary and how
 are bpf programs loaded on demand, let's inspect a simpler program, [[https://github.com/libbpf/libbpf-bootstrap/blob/d6f8b82aed0f924ff63fd30f8d0aebeac92af5ad/examples/c/uprobe.c][uprobe]] from [[https://github.com/libbpf/libbpf-bootstrap][libbpf-bootstrap]],
-which also embeds bpf programs with libbpf and bpftool.
+a simple program to probe usserspace function calls and returns which also embeds bpf programs with libbpf and bpftool.
 
 ** Where are the bpf programs located in the memory?
-One possibility is, bpf programs are, like dynamic libraries, mmaped into ~uprobe~'s memory space.
+One possibility is bpf programs, like dynamic libraries, are mmaped into ~uprobe~'s memory space.
 If this is the case, we need to find out the memory region of the bpf programs, and which file they are mapped from.
 
 Let's use ~bpftrace~ to trace the instructions passed to ~bpf(2)~.
@@ -197,29 +197,18 @@ We then run ~info proc mappings~ to view the memory lay out of the program ~upro
 
 To much of my disappointment, these two bpf programs are in the heap, not in some mmaped files.
 
-Actually, carefully inspecting ~sudo cat /proc/$(pgrep '^uprobe$')/maps~ will show there are no extra mapped files
+Actually, carefully inspecting ~sudo cat /proc/$(pgrep '^uprobe$')/maps~ will show that there are no extra mapped files
 which could include the bpf programs.
 
 ** The embedded bpf object
 
-Following libbpf-boostrap's instruction, we build ~uprobe~ with a side effect of generating
+Following libbpf-boostrap's instructions, we build ~uprobe~ with a side effect of generating
 a file ~uprobe.skel.h~ which contains a snippet
 
-#+begin_src c
-  static inline const void *uprobe_bpf__elf_bytes(size_t *sz)
-  {
-          ,*sz = 3304;
-          return (const void *)"\
-  \x7f\x45\x4c\x46\x02\x01\x01\0\0\0\0\0\0\0\0\0\x01\0\xf7\0\x01\0\0\0\0\0\0\0\0\
-  ......
-  \0\0\0\0\0\0\0\0\0\0\0\xe8\x08\0\0\0\0\0\0\0\0\0\0\x40\0\0\0\0\0\x40\0\x10\0\
-  \0\0\0\0\0\0\x87\0\0\0\x03\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x38\x08\0\0\0\
-  \0\0\0\xb0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x01\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-  }
-#+end_src
+#+INCLUDE: ./assets/snippets/uprobe.skel.h :lines "161-281" src c
 
 Eureka! This is the bpf program. Look at the head of this file. ~\x7f\x45\x4c\x46~ is
-the magic number for ELF files.
+the magic number for ELF files, while [[https://patchwork.ozlabs.org/project/netdev/patch/d7fb256f1011ef948809f1447f745da42da970a3.1469038166.git.daniel@iogearbox.net/][~\xf7~ is the machine number for bpf]].
 
 For better understanding of what this array does, we dump it to a file with the following c program.
 
@@ -232,8 +221,8 @@ clang -g -I.output -I../../libbpf/include/uapi -I../../vmlinux/x86/ -idirafter /
 #+end_src
 
 Your mileage may vary. I save the data to ~bpf_program.o~ with ~./uprobe_save bpf_program.o~. It is indeed a valid ELF file.
-Moreover, we can load it with ~sudo bpftool prog load bpf_program.o /sys/fs/bpf/bpf_program~
-A warning is printed.
+Moreover, we can load it with ~sudo bpftool prog load bpf_program.o /sys/fs/bpf/bpf_program~.
+A warning is printed while loading it.
 
 #+begin_src text
 libbpf: elf: skipping unrecognized data section(8) .eh_frame
@@ -258,7 +247,7 @@ We see ~sudo bpftool prog list~ now list a new program ~uprobe~ with an old tag 
         btf_id 497
 #+end_src
 
-We can now be sure the array returned from ~uprobe_bpf__elf_bytes~ is indeed the long-hunted bpf object.
+We are now certain that the array returned from ~uprobe_bpf__elf_bytes~ is indeed the long-hunted bpf object.
 Note that the program ~uretprobe~ is not loaded. The reason may still be bpftool ELF loader's inability to detect multiple programs.
 It is just not designed to work this way.
 
@@ -268,8 +257,8 @@ Now that the bpf object is saved as a hard-coded ~const void *~, we may find it 
 172168        0x2A088         ELF, 64-bit LSB relocatable, version 1 (SYSV)
 #+end_src
 We can extract it to a separated file with ~binwalk --extract tmp ./uprobe~.
-~file tmp/_uprobe.extracted/2A088.o~ shows it is a "ELF 64-bit LSB relocatable, eBPF, version 1 (SYSV), not stripped".
-~tmp/_uprobe.extracted/2A088.o~ may contain some extra bytes. To obtain an identical object file,
+~file tmp/_uprobe.extracted/2A088.o~ shows it is a "ELF 64-bit LSB relocatable, eBPF, version 1 (SYSV), not stripped". But
+~tmp/_uprobe.extracted/2A088.o~ contains some extra bytes. To obtain an identical object file,
 we can run ~dd if=uprobe of=bpf_program_extracted.o bs=1 skip=172168 count=3304~ where ~172168~ is the start offset obtained from ~binwalk~,
 ~3304~ is the size obtained from inspecting function ~uprobe_bpf__elf_bytes~ in the skeleton code.
 We can verify this by running ~sha512sum tmp/_uprobe.extracted/2A088.o bpf_program.o bpf_program_extracted.o~.
@@ -279,16 +268,16 @@ We can verify this by running ~sha512sum tmp/_uprobe.extracted/2A088.o bpf_progr
 79ee4b9a85cec9bda9351936cbae4f8a879f87a7b7afd7108ffae74fe95691fd1828d20380d71b0ae5b5cbb935548fa57ed4555143fa72b811f4ba70e92914eb  bpf_program_extracted.o
 #+end_src
 
-Now the conclusion is clear. ~bpftool gen sketelon~ generates a skeleton code which contains a hard-coded bpf object. The compiler and linker
-save this to the ~.rodata~ section (~const void *~) of the final binary. From the point of view of an ordinary C function, bpf object is just another ordinary pointer.
+Now the conclusion is clear. ~bpftool gen sketelon~ generates skeleton code which contains a hard-coded bpf object. The compiler and linker
+save this to the ~.rodata~ section (~const void *~) of the final binary. From the point of view of an ordinary C function, this bpf program is just another ordinary pointer.
 It is also clear that, we have no reliable way to extract bpf objects from elf files as embedding details depend on implementation.
-Different compilers and linkers may have different behaviour, e.g. the position within ~.rodata~ can not be determined easily.
-The best take is using ~binwalk~. Fortunately the extraneous bytes in the resulting binary do not really matter.
+Different compilers and linkers may have different behaviours, e.g. the position within ~.rodata~ can not be determined easily.
+The best take is using ~binwalk~. Fortunately the extraneous bytes in the resulting binary do not really matter. We can load the ELF anyway.
 
 ** TODO How is the bpf object loaded and all the other things bpf programs need?
 For now, see [[https://lkml.kernel.org/netdev/20191213223214.2791885-1-andriin@fb.com/t/][[PATCH v3 bpf-next 00/17] Add code-generated BPF object skeleton support]].
 
 * Addendum
-+ The nix compiling failure is because of per process file limit.
-+ The attached bpf program for all cgroups is systemd's IP accounting program.
-+ Both options can be tuned in ~/etc/systemd/system.conf~, see [[https://www.man7.org/linux/man-pages/man5/systemd-system.conf.5.html][systemd-system.conf(5)]] for details.
++ The compiling failure was because of the per process open files limit.
++ It was systemd's IP accounting program that was attached to every cgroup.
++ Both options can be tuned in ~/etc/systemd/system.conf~, see ~DefaultIPAccounting~ and ~DefaultLimitNOFILE~ in [[https://www.man7.org/linux/man-pages/man5/systemd-system.conf.5.html][systemd-system.conf(5)]].
