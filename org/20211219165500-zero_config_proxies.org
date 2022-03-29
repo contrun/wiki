@@ -94,6 +94,35 @@ I also add the following to a systemd unit to skip proxy for a systemd unit.
 SupplementaryGroups=noproxy
 #+end_src
 
+** Gotchas
+Although it is straightforward to set up transparent proxy on Linux, There are two complications when I want to proxy docker container traffic transparently.
+
+*** Transparent proxy does not work with docker container in bridge network mode
+This is a first world problem. Docker/Kubernetes [[https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#network-plugin-requirements][wants]] ~sysctl net.bridge.bridge-nf-call-iptables=1~, while libvirt [[https://wiki.libvirt.org/page/Net.bridge.bridge-nf-call_and_sysctl.conf][wants]] ~sysctl net.bridge.bridge-nf-call-iptables=0~.
+More explanations can be found [[http://ebtables.netfilter.org/misc/brnf-faq.html][here]], [[https://serverfault.com/questions/963759/docker-breaks-libvirt-bridge-network][here]] and [[https://github.com/kelseyhightower/kubernetes-the-hard-way/issues/561#issue-585446276][here]]. The following scenery illustrates why docker/Kubernetes insists on enabling ~bridge-netfilter~.
+#+begin_src shell
+  docker run -it --rm -p 8081:8081 nicolaka/netshoot socat -v -v -d -d tcp-listen:8081,fork exec:cat
+
+  HOST_IP="$(ip -4 -json addr | jq -r '.[] | .addr_info[] | select(.scope == "global") | .local' | head -n 1)"
+  docker run -it --rm -p 8082:8082 nicolaka/netshoot bash -c "echo test | socat - tcp:$HOST_IP:8081"
+  docker run -it --rm -p 8082:8082 nicolaka/netshoot bash -c "echo test | socat - tcp:$HOST_IP:8081,bind=\$(ip -4 -json addr show dev eth0 | jq -r '.[].addr_info[].local'):8082"
+  docker run -it --rm -p 8082:8082 nicolaka/netshoot bash -c "echo test | socat - tcp:$HOST_IP:8081,bind=127.1.0.1:8082"
+#+end_src
+
+When ~bridge-netfilter~ is disabled, the last command would time out, while the other two commands will not.
+This kind of hairpinning support is seldom needed on my machine.
+#+begin_src shell
+  sysctl net.bridge.bridge-nf-call-iptables=0 net.bridge.bridge-nf-call-ip6tables=0 net.bridge.bridge-nf-call-arptables=0
+#+end_src
+So I disable ~bridge-netfilter~. A further complication is that k3s and docker is so smart as to enable ~bridge-netfilter~ on startup.
+I [[https://github.com/contrun/dotfiles/commit/122bef19579e18fcd9e8ca778a64ec0688b9555f][added]] a ~ExecStartPost~ to disable it.
+
+*** Transparent proxy does not work with docker container when on-ip is missing
+To be more precise, sometimes it does not work. I don't know why. I just banged my head for a few hundreds times and find out ~--on-ip~ is a must.
+#+begin_src shell
+  iptables -t mangle -A CLASH_EXTERNAL -p tcp -j TPROXY --on-port 7893 --on-ip 127.0.0.1 --tproxy-mark 0x4242/0xffffffff
+#+end_src
+
 * DNS resolution
 It is of no use for the proxy server to send its requests to a fake server. There are mainly to methods to avoid [[https://en.wikipedia.org/wiki/DNS_spoofing][DNS poisoning]].
 ** [[https://en.wikipedia.org/wiki/Bogon_filtering][Bogon IP]]
@@ -153,3 +182,4 @@ The Android APP [[https://github.com/Mygod/VPNHotspot][VPN Hotspot]] works like 
 + WiFi relay
 + new host spot
 ** Windows/macOS l2 proxy
+** macvlan virtual machine
