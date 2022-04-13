@@ -13,11 +13,22 @@ No configuration entry for proxies, no environment variable.
 * VPN
 May be you're wondering what's wrong with the good old VPN. This is the way to go.
 It ultimately boils down to the flexibility.
-** proxying rules
+# TODO: add example comamnds to illustrate the following sections.
+** Routing tables
 We need TCP connections to foreign countries to be proxied, while those to domestic servers should not be proxied.
 VPN solutions normally can only decide to proxy traffic based on simple routing tables.
-** DNS
-Simple forwarding will not work in complicated environment. Somethings we want our proxying decisions based on the domain name of the request.
+** Network namespace
+To let only specific programs make use of the VPN, we can use Linux's network namespace.
+See [[https://www.wireguard.com/netns/][Routing & Network Namespaces]], [[https://unix.stackexchange.com/questions/149293/feed-all-traffic-through-openvpn-for-a-specific-network-namespace-only][Feed all traffic through OpenVPN for a specific network namespace only]]
+for example usage of wireguard and openvpn in network namespace.
+** VPN in userspace
+Another choice for proxying some program's traffic is to use userspace VPN.
+This solution does not rely on kernel's network stack, thus is very flexiable. The downside is that,
+without kernel's support, it may be hard for the programs whose source is not under control to use our VPN.
+See [[https://fly.io/blog/our-user-mode-wireguard-year/][Our User-Mode WireGuard Year]] for some example usage.
+** More complex proxying rules
+Simple forwarding all traffic into the tun device will not work in complicated environment.
+Sometimes we want our proxying decisions based on the domain name of the request.
 Traditional VPNs are futile in those cases.
 
 * Hooks injection
