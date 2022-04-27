@@ -12,20 +12,26 @@ No configuration entry for proxies, no environment variable.
 
 * VPN
 May be you're wondering what's wrong with the good old VPN. This is the way to go.
-It ultimately boils down to the flexibility.
+It ultimately boils down to the flexibility. We may want leave some traffic as it is, while
+transparently manipulate some other traffic to make it use the proxy.
+Here are a few methods to change the proxying policies for VPN.
+
 # TODO: add example comamnds to illustrate the following sections.
 ** Routing tables
 We need TCP connections to foreign countries to be proxied, while those to domestic servers should not be proxied.
 VPN solutions normally can only decide to proxy traffic based on simple routing tables.
-** Network namespace
+** Network namespaces
 To let only specific programs make use of the VPN, we can use Linux's network namespace.
-See [[https://www.wireguard.com/netns/][Routing & Network Namespaces]], [[https://unix.stackexchange.com/questions/149293/feed-all-traffic-through-openvpn-for-a-specific-network-namespace-only][Feed all traffic through OpenVPN for a specific network namespace only]]
-for example usage of wireguard and openvpn in network namespace.
+Below is an simple script to run openvpn in network namespace (adopted from [[https://unix.stackexchange.com/questions/149293/feed-all-traffic-through-openvpn-for-a-specific-network-namespace-only][Feed all traffic through OpenVPN for a specific network namespace only]])
+#+INCLUDE: ./assets/snippets/netns-openvpn.sh src shell
+
+See [[https://www.wireguard.com/netns/][Routing & Network Namespaces]] for example usage of wireguard.
 ** VPN in userspace
 Another choice for proxying some program's traffic is to use userspace VPN.
 This solution does not rely on kernel's network stack, thus is very flexiable. The downside is that,
 without kernel's support, it may be hard for the programs whose source is not under control to use our VPN.
-See [[https://fly.io/blog/our-user-mode-wireguard-year/][Our User-Mode WireGuard Year]] for some example usage.
+See [[https://fly.io/blog/our-user-mode-wireguard-year/][Our User-Mode WireGuard Year]] for an illustration. See [[https://github.com/octeep/wireproxy][octeep/wireproxy]] and [[https://tailscale.com/kb/1112/userspace-networking/][Tailscale Userspace networking mode (for containers)]]
+for real world usage.
 ** More complex proxying rules
 Simple forwarding all traffic into the tun device will not work in complicated environment.
 Sometimes we want our proxying decisions based on the domain name of the request.
@@ -67,8 +73,7 @@ as tproxy server's receiving socket is set to be of original destination.
 
 A few notes:
 + The above script makes all TCP traffic to be tproxied to ~127.0.0.1:$CLASH_TPROXY_PORT~.
-+ I intentionally create a new chain called ~CLASH_EXTERNAL~ to make it easier to restore order.
-Running ~iptables-save -c | grep -v CLASH_ | iptables-restore -c~ is enough.
++ I intentionally create a new chain called ~CLASH_EXTERNAL~ to make it easier to restore order. Running ~iptables-save -c | grep -v CLASH_ | iptables-restore -c~ is enough.
 + The ~ip rule~ and ~ip route~ commands make sure all traffic is forwarded, including local traffic and forwarding traffic.
 + if check is used for idem-potency.
 
@@ -87,28 +92,44 @@ A few notes:
 Just like redirect.
 
 ** traffic matching methods
-See ~iptables-extensions(8)~ for more methods.
+Below are some frequently used traffic matching methods. See ~iptables-extensions(8)~ for more methods.
 *** ipset
 netfilter itself is able to match a few IPs effectively. When an entire country's IP addresses need matching,
 it would be better to use ipset.
 *** cgroup
 See [[https://github.com/springzfx/cgproxy][cgproxy]].
 *** owner, supplementary groups
-I use iptables owner module to avoid infinite loop. Use supplementary groups to skip proxy for some programs.
+See gotchas below.
+
+** Gotchas
+Although it is straightforward to set up transparent proxy on Linux, There are a few delicated situations.
+
+*** Infinite loop while using the proxy
+I use iptables owner module to avoid infinite loop for the proxy itself, supplementary groups to skip proxy for some programs.
 #+begin_src shell
   iptables -t mangle -I CLASH_LOCAL -m owner --uid-owner "$CLASH_USER" -j RETURN
   iptables -t mangle -I CLASH_LOCAL -m owner --gid-owner "$NOPROXY_GROUP" --suppl-groups -j RETURN || true
 #+end_src
-I also add the following to a systemd unit to skip proxy for a systemd unit.
+
+To let iptables skip traffic from clash, I run clash with
+#+begin_src shell
+  useradd --system --no-create-home "$CLASH_USER" >/dev/null 2>&1 || true
+  capsh --user="$CLASH_USER" --caps='cap_net_admin+eip cap_setpcap,cap_setuid,cap_setgid+ep' --addamb=cap_net_admin -- -c "clash -f $CLASH_CONFIG"
+#+end_src
+Change the ~clash~ command the ~$CLASH_USER~ for your proxy.
+
+I also use the following snippet to skip proxy for a systemd service.
 #+begin_src systemd
 [Service]
 SupplementaryGroups=noproxy
 #+end_src
 
-** Gotchas
-Although it is straightforward to set up transparent proxy on Linux, There are two complications when I want to proxy docker container traffic transparently.
+To skip proxy temporarily, run ~sudo systemd-run -p SupplementaryGroups="noproxy" --uid $USER --pty --same-dir --wait --collect --service-type=exec curl https://cloudflare-quic.com/b/ip~.
+You may also try start a cgroup with ~systemd-run --unit=noproxy --user --shell~, and then run
+~sudo iptables -t mangle -I CLASH_LOCAL -m cgroup --path user.slice/user-$UID.slice/user@$UID.service/app.slice/noproxy.service -j RETURN~
+to make traffic within this cgroup bypass proxy.
 
-*** Transparent proxy does not work with docker container in bridge network mode
+*** Proxy not working with docker container in bridge network mode
 This is a first world problem. Docker/Kubernetes [[https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#network-plugin-requirements][wants]] ~sysctl net.bridge.bridge-nf-call-iptables=1~, while libvirt [[https://wiki.libvirt.org/page/Net.bridge.bridge-nf-call_and_sysctl.conf][wants]] ~sysctl net.bridge.bridge-nf-call-iptables=0~.
 More explanations can be found [[http://ebtables.netfilter.org/misc/brnf-faq.html][here]], [[https://serverfault.com/questions/963759/docker-breaks-libvirt-bridge-network][here]] and [[https://github.com/kelseyhightower/kubernetes-the-hard-way/issues/561#issue-585446276][here]]. The following scenery illustrates why docker/Kubernetes insists on enabling ~bridge-netfilter~.
 #+begin_src shell
@@ -120,7 +141,7 @@ More explanations can be found [[http://ebtables.netfilter.org/misc/brnf-faq.htm
   docker run -it --rm -p 8082:8082 nicolaka/netshoot bash -c "echo test | socat - tcp:$HOST_IP:8081,bind=127.1.0.1:8082"
 #+end_src
 
-When ~bridge-netfilter~ is disabled, the last command would time out, while the other two commands will not.
+When ~bridge-netfilter~ is disabled, the last command would time out, but the other two commands will not.
 This kind of hairpinning support is seldom needed on my machine.
 #+begin_src shell
   sysctl net.bridge.bridge-nf-call-iptables=0 net.bridge.bridge-nf-call-ip6tables=0 net.bridge.bridge-nf-call-arptables=0
@@ -128,14 +149,14 @@ This kind of hairpinning support is seldom needed on my machine.
 So I disable ~bridge-netfilter~. A further complication is that k3s and docker is so smart as to enable ~bridge-netfilter~ on startup.
 I [[https://github.com/contrun/dotfiles/commit/122bef19579e18fcd9e8ca778a64ec0688b9555f][added]] a ~ExecStartPost~ to disable it.
 
-*** Transparent proxy does not work with docker container when on-ip is missing
+*** Proxy not working with docker container when on-ip is missing
 To be more precise, sometimes it does not work. I don't know why. I just banged my head for a few hundreds times and find out ~--on-ip~ is a must.
 #+begin_src shell
   iptables -t mangle -A CLASH_EXTERNAL -p tcp -j TPROXY --on-port 7893 --on-ip 127.0.0.1 --tproxy-mark 0x4242/0xffffffff
 #+end_src
 
 * DNS resolution
-It is of no use for the proxy server to send its requests to a fake server. There are mainly to methods to avoid [[https://en.wikipedia.org/wiki/DNS_spoofing][DNS poisoning]].
+It is of no use for the proxy server to send its requests to a fake server. There are mainly two methods to avoid [[https://en.wikipedia.org/wiki/DNS_spoofing][DNS poisoning]].
 ** [[https://en.wikipedia.org/wiki/Bogon_filtering][Bogon IP]]
 + Client initiate a DNS request to resolve google.com
 + The proxy service immediately returns the IP address 192.18.0.22, insert the mapping from 192.18.0.22 to google.com into its internal state
@@ -153,6 +174,7 @@ If you ever used macOS, iOS and android, you will find how easy it is on these p
 These VPN services, unlike traditional ones, are much more flexible. They are like PAC proxies, but for all programs.
 Below is a typical proxy traffic flow in those platforms.
 
+** Life of a packet
 #+begin_example
 apps <-> OS <-(L2/L3)-> virtual tunnel <-(L2/L3)-> proxy frontend <-(L4)-> socks5 client <-> proxy client <-> internet <-> proxy server <-> internet
 #+end_example
@@ -162,17 +184,22 @@ apps <-> OS <-(L2/L3)-> virtual tunnel <-(L2/L3)-> proxy frontend <-(L4)-> socks
 + The proxy backend client sends the proxy requests to the proxy backend server over the Internet.
 + Upon receiving the response, the proxy server sends it back to the proxy client.
 
+** A few details
 There are a few things requiring special attention.
 + How does the proxy frontend get L4 packets from L2/L3 packets in the chain
-     ~OS <-(L2/L3)-> virtual tunnel <-(L2/L3)-> proxy frontend <-(L4)-> socks5 client~ ?
+     ~OS <-(L2/L3)-> virtual tunnel <-(L2/L3)-> proxy frontend <-(L4)-> socks5 client~?
 + How does the proxy client avoid infinite loop?
-The first question is solved by [[https://github.com/darkk/redsocks][~redsocks~]] and [[https://github.com/ambrop72/badvpn][~tun2socks~]]. There are quite a few solutions on the market.
-Moreover, apple, by the OS itself, provides such L2/L3 to L4 convertor. It is called [[https://developer.apple.com/documentation/networkextension/neappproxyprovider][NEAppProxyProvider]].
-This is why there are some many proxies on macOS with enhanced mode. [[https://developer.apple.com/documentation/networkextension][networkextension]] also provides DNS Proxy, Filtering API
-Windows users also have a few generic solutions like [[https://github.com/eycorsican/leaf][leaf]] and [[https://github.com/YtFlow/Maple][maple]]. Besides,
-[[https://github.com/Dreamacro/clash#premium-release][clash premium]] supports tun, and it does those tunnel to sockss conversions automatically.
 
-The second question is platform-dependent. For android, [[https://fqrouter.tumblr.com/post/51474945203/socks%E4%BB%A3%E7%90%86%E8%BD%ACvpn][this article]] is oldie and goodie.
+The first question is solved by [[https://github.com/darkk/redsocks][~redsocks~]] and [[https://github.com/ambrop72/badvpn][~tun2socks~]]. There are quite a few solutions on the market.
+Moreover, apple, by the OS itself, provides such L4 to L2/L3 convertor. It is called [[https://developer.apple.com/documentation/networkextension/neappproxyprovider][NEAppProxyProvider]].
+This is why there are some many proxies on macOS have enhanced mode (effectively an L3 proxy backed by an L3 proxy).
+Moreover, [[https://developer.apple.com/documentation/networkextension][networkextension]] also provides useful APIs to change DNS Proxy and filter traffic.
+Windows users also have a few generic solutions like [[https://github.com/eycorsican/leaf][leaf]] and [[https://github.com/YtFlow/Maple][maple]].
+Besides, [[https://github.com/Dreamacro/clash#premium-release][clash premium]] supports tun, and it does those socks5 proxy to l3 tunnel conversions automatically.
+
+The second question is platform-dependent. Wireguard's [[https://www.wireguard.com/netns/][Routing & Network Namespaces]] gives a good overview for this problem on Linux.
+A simple generic solution is to add a new routing table entry for the server's IP so that connection to the server is excluded from redirecting to the tun device.
+See also [[https://github.com/OpenVPN/openvpn/blob/237ba888684e9b035e3b05d661dd44011be0dcb2/src/openvpn/route.c#L993-L1114][openvpn's implementation]], [[https://fqrouter.tumblr.com/post/51474945203/socks%E4%BB%A3%E7%90%86%E8%BD%ACvpn][how shadowsocks Android solves this problem]].
 
 * router in the middle
 You can also set up a router in the middle to transparently proxy your traffic.
