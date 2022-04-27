@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Adapted from https://unix.stackexchange.com/a/196116
+# Adopted from https://unix.stackexchange.com/a/196116
 # sudo $0 --config config.ovpn --auth-user-pass user-pass.txt
 # sudo ip netns exec openvpn sudo -u $(whoami) command
 
