@@ -1,0 +1,227 @@
+:PROPERTIES:
+:ID:       1ba0d165-3d8e-4b25-8c77-fcedc67e0cbb
+:END:
+#+title: LD_PRELOAD pitfalls
+#+filetags: :troubleshooting:elf:nix:dynamic_linking:
+
+LD_PRELOAD is [[https://blog.jessfraz.com/post/ld_preload/][a great hack]]. I recently encountered a strange error while generating ~compile_commands.json~ with [[https://github.com/rizsotto/Bear][rizsotto/Bear]].
+Guess what, the culprit is LD_PRELOAD.
+
+* A strange error
+I was trying to hack on nix. Following nix's official instructions, I started a nix shell with ~nix develop~
+in which we have all the building dependencies (with their versions locked) for nix.
+I attempted to generate ~compile_commands.json~ for my language server clangd by running ~bear -- make~.
+
+I got
+#+begin_src text
+make: /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6: version `GLIBC_2.34' not found (required by /nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so)
+make: /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6: version `GLIBC_2.33' not found (required by /nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/libstdc++.so.6)
+make: /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6: version `GLIBC_2.34' not found (required by /nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/libstdc++.so.6)
+make: /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6: version `GLIBC_2.34' not found (required by /nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/libgcc_s.so.1)
+#+end_src
+
+I was baffled by this error message, as ~make~ actually never depends on ~libexec.so~, ~libstdc++.so.6~ or ~libgcc_s.so.1~.
+This can be verified with ~ldd $(which make)~
+#+begin_src text
+        linux-vdso.so.1 (0x00007ffcb3b84000)
+        libdl.so.2 => /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libdl.so.2 (0x00007fb41cf33000)
+        libc.so.6 => /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6 (0x00007fb41cd72000)
+        /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/ld-linux-x86-64.so.2 => /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib64/ld-linux-x86-64.so.2 (0x00007fb41cf3a000)
+#+end_src
+
+Moreover, as shown in the ldd output, ~make~ only depends on ~glibc-2.32-54~. Where does this ~GLIBC_2.34~ come from?
+Bot running ~bear~ and ~make~ separately and running ~bear -- make~ outside the nix shell are OK.
+So who reports this cryptic error and what on hell does this means?
+
+* The theory
+** Bear's preloaded libexec.so
+The spoiler is in this article's title. ~bear~ used ~LD_PRELOAD~ to preload a dynamic library,
+~/nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so~, to the building process.
+This dynamic library is used to trace which processes are launched by the building command.
+
+It would become clear if we have a look at ~libexec.so~'s dynamic symbols.
+
+~readelf -s /nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so~ shows
+#+begin_src text
+Symbol table '.dynsym' contains 34 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND
+     1: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     2: 0000000000000000     0 OBJECT  GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     3: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     4: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     5: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     6: 0000000000000000     0 OBJECT  GLOBAL DEFAULT  UND _[...]@CXXABI_1.3 (3)
+     7: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND fsync@GLIBC_2.2.5 (2)
+     8: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     9: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND c[...]@GLIBC_2.17 (4)
+    10: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND dlsym@GLIBC_2.34 (5)
+    11: 0000000000000000     0 OBJECT  WEAK   DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+    12: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __[...]@GLIBC_2.4 (6)
+    13: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+    14: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+    15: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __[...]@GLIBC_2.8 (7)
+    16: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+    17: 0000000000000000     0 OBJECT  GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+    18: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterT[...]
+    19: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+    20: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMC[...]
+    21: 0000000000002190   280 FUNC    GLOBAL DEFAULT   12 posix_spawnp
+    22: 0000000000001660   241 FUNC    GLOBAL DEFAULT   12 execvp
+    23: 0000000000001570   233 FUNC    GLOBAL DEFAULT   12 execvpe
+    24: 0000000000001470   241 FUNC    GLOBAL DEFAULT   12 execv
+    25: 0000000000001ba0   565 FUNC    GLOBAL DEFAULT   12 execlp
+    26: 0000000000002070   280 FUNC    GLOBAL DEFAULT   12 posix_spawn
+    27: 0000000000001380   233 FUNC    GLOBAL DEFAULT   12 execve
+    28: 0000000000001760   257 FUNC    GLOBAL DEFAULT   12 execvP
+    29: 0000000000001de0   650 FUNC    GLOBAL DEFAULT   12 execle
+    30: 0000000000001870   233 FUNC    GLOBAL DEFAULT   12 exect
+    31: 0000000000001240    96 FUNC    GLOBAL DEFAULT   12 on_load
+    32: 0000000000001220    32 FUNC    GLOBAL DEFAULT   12 on_unload
+    33: 0000000000001960   565 FUNC    GLOBAL DEFAULT   12 execl
+#+end_src
+We can see, there are several symbols related to ~exec~, which can be used to trace the commands gcc/clang would run to build the nix program.
+
+** What is this error?
+This error message is reported by [[https://github.com/bminor/glibc/blob/d056c212130280c0a54d9a4f72170ec621b70ce5/elf/dl-version.c#L144][glibc's dynamic linker]].
+If we were to trace the loading of dynamic libraries with ~strace bear -- make~ and ~LD_DEBUG=files,versions bear -- make~.
+We will find ~ld.so~ first tries to load ~libexec.so~ (because of the environment variable LD_PRELOAD, see below),
+and then loads ~make~'s direct dynamic library dependencies, finally it loads those libraries' dynamic library dependencies.
+
+#+begin_src text
+   4002469:	file=/nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so [0];  needed by make [0]
+   4002469:	file=/nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so [0];  generating link map
+   4002469:	  dynamic: 0x00007f1dfc4b6d20  base: 0x00007f1dfc4b0000   size: 0x0000000000009068
+   4002469:	    entry: 0x00007f1dfc4b0000  phdr: 0x00007f1dfc4b0040  phnum:                 10
+   4002469:
+   4002469:
+   4002469:	file=libdl.so.2 [0];  needed by make [0]
+   4002469:	find library=libdl.so.2 [0]; searching
+   4002469:	 search path=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/x86_64/x86_64:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/x86_64:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/x86_64:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/x86_64/x86_64:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/x86_64:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/x86_64:/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib		(system search path)
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/x86_64/x86_64/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/x86_64/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/x86_64/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/tls/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/x86_64/x86_64/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/x86_64/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/x86_64/libdl.so.2
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libdl.so.2
+   4002469:
+   4002469:	file=libdl.so.2 [0];  generating link map
+   4002469:	  dynamic: 0x00007f1dfc4aecf8  base: 0x00007f1dfc4ab000   size: 0x0000000000004090
+   4002469:	    entry: 0x00007f1dfc4ac120  phdr: 0x00007f1dfc4ab040  phnum:                  9
+   4002469:
+   4002469:
+   4002469:	file=libc.so.6 [0];  needed by make [0]
+   4002469:	find library=libc.so.6 [0]; searching
+   4002469:	 search path=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib		(system search path)
+   4002469:	  trying file=/nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6
+   4002469:
+   4002469:	file=libc.so.6 [0];  generating link map
+   4002469:	  dynamic: 0x00007f1dfc4a39c0  base: 0x00007f1dfc2ea000   size: 0x00000000001c0230
+   4002469:	    entry: 0x00007f1dfc311f30  phdr: 0x00007f1dfc2ea040  phnum:                 12
+   4002469:
+   4002469:
+   4002469:	file=libstdc++.so.6 [0];  needed by /nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so [0]
+   4002469:	find library=libstdc++.so.6 [0]; searching
+   4002469:	 search path=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/x86_64/x86_64:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/x86_64:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/x86_64:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/x86_64/x86_64:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/x86_64:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/x86_64:/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/x86_64/x86_64:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/x86_64:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/x86_64:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/x86_64/x86_64:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/x86_64:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/x86_64:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib		(RUNPATH from file /nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so)
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/x86_64/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/tls/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/x86_64/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/x86_64/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/tls/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/x86_64/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/x86_64/libstdc++.so.6
+   4002469:	  trying file=/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib/libstdc++.so.6
+   4002469:
+   4002469:	file=libstdc++.so.6 [0];  generating link map
+   4002469:	  dynamic: 0x00007f1dfc2e2be0  base: 0x00007f1dfc0d6000   size: 0x0000000000213840
+   4002469:	    entry: 0x00007f1dfc0d6000  phdr: 0x00007f1dfc0d6040  phnum:                 11
+#+end_src
+
+~ld.so~ finds out ~libexec.so~'s dependency ~libc.so.6~ is already satisfied.
+~libexec.so~'s dynamic section is shown below.
+
+#+begin_src text
+Dynamic section at offset 0x5d20 contains 32 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so.2]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000e (SONAME)             Library soname: [libexec.so]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib:/nix/store/psijdi9190zgbp053y6dj3ax4y2l70gk-gcc-11.2.0-lib/lib]
+#+end_src
+
+So ~ld.so~ does not load ~libc.so.6~ again. Instead it tries to checking if the version provided in ~glibc.so~ satisfies the requirements of ~libexec.so~.
+
+#+begin_src text
+   4002469:	checking for version `GLIBC_2.34' in file /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc.so.6 [0] required by file /nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so [0]
+#+end_src
+
+Unfortunately the version definition section ~.gnu.version_d~ of ~libc.so.6~ does not have
+the ~GLIBC_2.34~ in the version needs section ~.gnu.version_r~ of ~libexec.so~.
+Thus, the dynamic linker exits promptly. See [[https://maskray.me/blog/2020-11-26-all-about-symbol-versioning][All about symbol versioning]] for more information.
+
+** The solution
+It is nix's hermiticity that caused this problem. Because ~make~ specifies the exact path of ~libc.so.6~
+in its binary (by modifying library runpath with patchelf). ~make~ must load glibc 2.32, while ~libexec.so~ requires glibc 2.34.
+If we were able to use a generic runpath like ~/usr/lib~, then ~ld.so~ may have loaded glibc 2.34, thus a happy ending.
+
+Resorting to ~/usr/lib~ is not a necessary evil. We have a simpler solution.
+Adding ~bear~ to ~nativeBuildDeps~ suffices. In this way, ~bear~ and ~make~
+are guaranteed to have the same dependent ~glibc~ version, as they are built with the ~bootstrap-stage4-stdenv-linux~.
+
+* The experiment
+Let's verify our theory above without looking into the bear's code.
+
+A tricky part of debugging this is that ~make~ exits immediately and ~bear~ folks a few times.
+Because ~make~ exits immediately, we have to find a breakpoint not too late, otherwise we have no chance to inspect the status of ~make~.
+Because bear folks a few times, it is somewhat hard for running ~gdb --args bear -- make~ directly to debug ~make~.
+
+My trick is to run ~bear -- /nix/store/d60gkg5dkw4y5kc055n4m0xyvcjz65im-bash-interactive-5.1-p16/bin/bash -c 'echo $$; read; exec make'~.
+Note ~/nix/store/d60gkg5dkw4y5kc055n4m0xyvcjz65im-bash-interactive-5.1-p16/bin/bash~ must have compatible glibc version with ~bear~, or
+it will immediately exit like ~make~.
+This command outputs the pid, say 3887495, ~make~ was to have and wait for our input to continue to run ~make~.
+We can view current loaded dynamic library for bash with ~cat /proc/3887495/maps~.
+
+Let's set two breakpoints, ~dl_main~ and ~_dl_signal_cexception~, the first is near the entry point of the dynamic linker,
+while the second is immediately before the abnormal exit. We also ~set follow-fork-mode child~ for gdb.
+This way, we will be able to debug ~make~ instead of ~bear~. We press enter and make let gdb continue to run the debugee.
+
+To verify our theory, we can run ~tr '\0' '\n' < /proc/$(pgrep make)/environ | grep bear~, which, as expected, shows
+#+begin_src text
+INTERCEPT_REPORT_COMMAND=/nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/wrapper
+LD_PRELOAD=/nix/store/8lgjaqkvi7kwgjqlfsf0jdk62n0s572g-bear-3.0.14/libexec/bear/libexec.so
+#+end_src
+
+Moreover, ~grep -i glibc /proc/$(pgrep make)/maps~ shows
+#+begin_src text
+7fdf6500a000-7fdf65019000 r--p 00000000 00:1c 3391892                    /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libm.so.6
+7fdf65019000-7fdf65086000 r-xp 0000f000 00:1c 3391892                    /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libm.so.6
+7fdf65086000-7fdf650e0000 r--p 0007c000 00:1c 3391892                    /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libm.so.6
+7fdf650e0000-7fdf650e1000 ---p 000d6000 00:1c 3391892                    /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libm.so.6
+7fdf650e1000-7fdf650e3000 rw-p 000d6000 00:1c 3391892                    /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libm.so.6
+7fdf652f7000-7fdf6531d000 r--p 00000000 00:1c 7355687                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc-2.32.so
+7fdf6531d000-7fdf65461000 r-xp 00026000 00:1c 7355687                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc-2.32.so
+7fdf65461000-7fdf654ad000 r--p 0016a000 00:1c 7355687                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc-2.32.so
+7fdf654ad000-7fdf654ae000 ---p 001b6000 00:1c 7355687                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc-2.32.so
+7fdf654ae000-7fdf654b4000 rw-p 001b6000 00:1c 7355687                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libc-2.32.so
+7fdf654b8000-7fdf654b9000 r--p 00000000 00:1c 7355694                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libdl-2.32.so
+7fdf654b9000-7fdf654ba000 r-xp 00001000 00:1c 7355694                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libdl-2.32.so
+7fdf654ba000-7fdf654bb000 r--p 00002000 00:1c 7355694                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libdl-2.32.so
+7fdf654bb000-7fdf654bd000 rw-p 00002000 00:1c 7355694                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/libdl-2.32.so
+7fdf654c9000-7fdf654ca000 r--p 00000000 00:1c 7355677                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/ld-2.32.so
+7fdf654ca000-7fdf654ea000 r-xp 00001000 00:1c 7355677                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/ld-2.32.so
+7fdf654ea000-7fdf654f3000 r--p 00021000 00:1c 7355677                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/ld-2.32.so
+7fdf654f3000-7fdf654f6000 rw-p 00029000 00:1c 7355677                    /nix/store/nprym6lf8lzhp1irb42lb4vp8069l5rj-glibc-2.32-54/lib/ld-2.32.so
+#+end_src
+As we can see, only ~libc-2.32.so~ was loaded and ~libm.so.6~ from 2.34 is loaded (because only ~libexec.so~ depends on ~libm~).
