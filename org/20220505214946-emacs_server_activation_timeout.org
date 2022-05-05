@@ -1,0 +1,189 @@
+:PROPERTIES:
+:ID:       c3edd9ff-916d-4ccf-a391-381e2d8e1449
+:END:
+#+title: emacs server activation timeout
+
+
+If you are also expirenecing the systemd emacs unit activating timeout, try
+
+#+begin_src shell
+  pkill -f -a emacs
+  rm -f /run/user/$UID/emacs/server
+#+end_src
+
+Maybe emacs is trying to connect to the server socket ~/run/user/$UID/emacs/server~, but for some reason,
+the server socket is obsolete. In that case, emacs would hang up. To make things more complicated,
+manually running ~emacs --debug-init~ almost certainly works. It's only when you are trying to start the daemon
+you will encounter problems (service launchers like systemd will think the emacs daemon service failed because
+no sub processes are spawn).
+
+
+* Symptoms
+My emacs service unit is repeatedly activating.
+#+begin_src text
+Active: activating (start) since Thu 2022-05-05 21:03:22 CST; 47s ago
+#+end_src
+
+Sometime after the emacs process started, it would be killed by systemd.
+The strange thing is that it always works when I manually start emacs.
+I initially thought it is my configuration's fault.
+[[https://github.com/Malabarba/elisp-bug-hunter][elisp-bug-hunter]] didn't help. I tried to pinpoint the failing code by bisection.
+It gradually became to me that my code may be is working correctly. I observed that both commenting out code
+above and below some point work. I also found that whenever I manually started emacs process is indeed
+unresponsive until I press a key (any key works).
+
+* Investigation
+I decided to look into the details of emacs running status by ~gdb -p $(pgrep -f 'emacs.*debug-init')~.
+
+#+begin_src text
+(gdb) info threads
+  Id   Target Id                                             Frame
+    1    Thread 0x7fe398ace000 (LWP 1019020) ".emacs-29.0.50-" 0x00007fe39bdbabb7 in connect () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+    * 2    Thread 0x7fe397539640 (LWP 1019040) "gmain"           0x00007fe39bdadf89 in poll () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+    (gdb) thread 1
+    [Switching to thread 1 (Thread 0x7fe398ace000 (LWP 1019020))]
+#0  0x00007fe39bdbabb7 in connect () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+    (gdb) backtrace
+#0  0x00007fe39bdbabb7 in connect () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+#1  0x000000000062f56c in connect_network_socket ()
+#2  0x00000000006303cb in Fmake_network_process ()
+#3  0x0000000000624dc1 in exec_byte_code ()
+#4  0x00000000005ddd3b in apply_lambda ()
+#5  0x00000000005de466 in eval_sub ()
+#6  0x00000000005dea1d in Fif ()
+#7  0x00000000005de552 in eval_sub ()
+#8  0x0000000000611a8a in readevalloop ()
+#9  0x0000000000612c91 in Feval_buffer ()
+#10 0x0000000000624dc1 in exec_byte_code ()
+#11 0x00000000005db2c7 in Ffuncall ()
+#12 0x000000000061292b in Fload ()
+#13 0x0000000000624dc1 in exec_byte_code ()
+#14 0x00000000005ddd3b in apply_lambda ()
+#15 0x00000000005de466 in eval_sub ()
+#16 0x00000000005de552 in eval_sub ()
+#17 0x00000000005de9dd in Fprogn ()
+#18 0x00000000005dd90e in funcall_lambda ()
+#19 0x00000000005ddd3b in apply_lambda ()
+#20 0x00000000005de466 in eval_sub ()
+#21 0x0000000000611a8a in readevalloop ()
+#22 0x0000000000612c91 in Feval_buffer ()
+#23 0x0000000000624dc1 in exec_byte_code ()
+#24 0x00000000005db2c7 in Ffuncall ()
+#25 0x000000000061292b in Fload ()
+#26 0x0000000000624dc1 in exec_byte_code ()
+#27 0x00000000005ddd3b in apply_lambda ()
+#28 0x00000000005de466 in eval_sub ()
+#29 0x00000000005e10aa in Feval ()
+#30 0x00000000005d9c0f in internal_condition_case ()
+#31 0x000000000054b92d in top_level_1 ()
+#32 0x00000000005d9b73 in internal_catch ()
+#33 0x000000000054adb3 in command_loop ()
+#34 0x000000000054f96a in recursive_edit_1 ()
+#35 0x000000000054fce7 in Frecursive_edit ()
+#36 0x000000000042cea4 in main ()
+    (gdb) thread 2
+    [Switching to thread 2 (Thread 0x7fe397539640 (LWP 1019040))]
+#0  0x00007fe39bdadf89 in poll () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+    (gdb) backtrace
+#0  0x00007fe39bdadf89 in poll () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+#1  0x00007fe39d53801e in g_main_context_iterate.constprop () from /nix/store/abwcp8fsvrign29hrqrha5psz8kkc4rx-glib-2.72.0/lib/libglib-2.0.so.0
+#2  0x00007fe39d53813f in g_main_context_iteration () from /nix/store/abwcp8fsvrign29hrqrha5psz8kkc4rx-glib-2.72.0/lib/libglib-2.0.so.0
+#3  0x00007fe39d538191 in glib_worker_main () from /nix/store/abwcp8fsvrign29hrqrha5psz8kkc4rx-glib-2.72.0/lib/libglib-2.0.so.0
+#4  0x00007fe39d5625ad in g_thread_proxy () from /nix/store/abwcp8fsvrign29hrqrha5psz8kkc4rx-glib-2.72.0/lib/libglib-2.0.so.0
+#5  0x00007fe39bd37eb2 in start_thread () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+#6  0x00007fe39bdba31c in clone3 () from /nix/store/ayrsyv7npr0lcbann4k9lxr19x813f0z-glibc-2.34-115/lib/libc.so.6
+
+#+end_src
+There are only two threads running. One is blocked at polling, another is trying to connecting to something.
+Unfortunately I can't figure out what emacs is trying to connect, ~lsof -p $(pgrep -a 'emacs.*debug-init')~
+only shows
+#+begin_src text
+.emacs-29 1019020    e    0u      CHR             136,15      0t0      18 /dev/pts/15
+.emacs-29 1019020    e    1u      CHR             136,15      0t0      18 /dev/pts/15
+.emacs-29 1019020    e    2u      CHR             136,15      0t0      18 /dev/pts/15
+.emacs-29 1019020    e    3u  a_inode               0,13        0    8493 [timerfd]
+.emacs-29 1019020    e    4u  a_inode               0,13        0    8493 [eventfd:159]
+.emacs-29 1019020    e    5u      CHR                5,0      0t0      11 /dev/tty
+.emacs-29 1019020    e    6u     unix 0x000000004c491458      0t0 1745132 type=STREAM (UNCONNECTED)
+.emacs-29 1019020    e   15u     unix 0x00000000f54422e9      0t0 1747036 type=STREAM (CONNECTED)
+.emacs-29 1019020    e   16u  a_inode               0,13        0    8493 [eventfd:164]
+.emacs-29 1019020    e   17u     unix 0x00000000938bed24      0t0 1747037 type=STREAM (CONNECTED)
+#+end_src
+
+I became to realize emacs maybe is trying to connect to the server socket, which for some reason,
+is un-connectable for now. I tried to verify my theory by inspect the argument emacs gives to the syscall connect.
+
+#+begin_src text
+(gdb) info registers
+rax            0xfffffffffffffe00  -512
+rbx            0x6                 6
+rcx            0x7fe39bdbabb7      140615549168567
+rdx            0x6e                110
+rsi            0xc79e410           209314832
+rdi            0x6                 6
+rbp            0xc79e410           0xc79e410
+rsp            0x7ffcf6ffed70      0x7ffcf6ffed70
+#+end_src
+
+~man 2 connect~ shows the signature of connect
+#+begin_src text
+       int connect(int sockfd, const struct sockaddr *addr,
+                   socklen_t addrlen);
+#+end_src
+
+while ~man 2 syscall~ shows the abi of linux syscall
+#+begin_src text
+  Arch/ABI      arg1  arg2  arg3  arg4  arg5  arg6  arg7  Notes
+  ──────────────────────────────────────────────────────────────
+  ......
+  x86-64        rdi   rsi   rdx   r10   r8    r9    -
+  ......
+#+end_src
+in particular, ~rdi~ value(6) is the socket fd, ~rsi~ (value 0xc79e410) is the ~sockaddr~ (of length ~$rdx~) given to the kernel.
+
+I tried to dump the content of ~sockaddr~ with
+#+begin_src text
+  (gdb) x/110bx $rsi
+  0xc79e410:      0x01    0x00    0x2f    0x72    0x75    0x6e    0x2f    0x75
+  0xc79e418:      0x73    0x65    0x72    0x2f    0x31    0x30    0x30    0x30
+  0xc79e420:      0x2f    0x65    0x6d    0x61    0x63    0x73    0x2f    0x73
+  0xc79e428:      0x65    0x72    0x76    0x65    0x72    0x00    0x00    0x00
+  ......
+  (gdb) x/s $rsi+2
+  0xc79e412:      "/run/user/1000/emacs/server"
+#+end_src
+
+Eureka. Emacs is indeed trying to connect to ~/run/user/1000/emacs/server~.
+So who is listening to this?
+
+#+begin_src text
+lsof -E /run/user/$UID/emacs/server
+
+lsof: WARNING: can't stat() zfs file system /var/lib/docker/zfs/graph/598f48f4aa007bc4092642e5997c8c86f8bd9d86df65a73e2ae0d38292c151c7
+      Output information may be incomplete.
+lsof: WARNING: can't stat() zfs file system /var/lib/docker/zfs/graph/69bad3e00b2eef638322f8cb1be1bc3f03c2f500f874e9719da680d64b64cb7d
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/ef24d71f2537
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/ef4c8c959af7
+      Output information may be incomplete.
+COMMAND      PID USER   FD   TYPE             DEVICE SIZE/OFF    NODE NAME
+.emacs-28 708873    e    7u  unix 0x00000000518bee2e      0t0 1144673 /run/user/1000/emacs/server type=STREAM (LISTEN)
+
+tr '\0' ' ' < /proc/708873/cmdline
+/nix/store/zq0czk42sfa2ryd0d2g6cdd04ps05nln-emacs-28.1/bin/emacs -l cl-loaddefs -l nix-generated-autoload -q -l magit -f magit --eval (local-set-key "q" #'kill-emacs) -f delete-other-windows -nw
+#+end_src
+
+Oh, it's some magit wrapper I wrote for ease of use of magit in the terminal.
+#+begin_src shell
+emacs -q -l magit -f magit --eval "(local-set-key \"q\" #'kill-emacs)" -f delete-other-windows "${emacs_arguments[@]}"
+#+end_src
+
+All I have to do is ~pkill emacs; rm -f /run/user/$UID/emacs/server*; systemctl restart --user emacs~, now everything works.
+
+One more thing, why is emacs working correctly when I manually started it?
+It is because the other thread is polling fd 4
+#+begin_src text
+.emacs-29 1019020    e    4u  a_inode               0,13        0    8493 [eventfd:159]
+#+end_src
+When I pressed any key, this thread was woken up.
