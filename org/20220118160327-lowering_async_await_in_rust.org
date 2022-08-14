@@ -19,6 +19,7 @@ Here are a few references:
 + [[https://rust-lang.github.io/async-book/][Asynchronous Programming in Rust]]
 + [[https://llvm.org/docs/Coroutines.html][Coroutines in LLVM]]
 + [[https://www.youtube.com/watch?v=Ztr8QvMhqmQ][2016 LLVM Developers’ Meeting: G. Nishanov “LLVM Coroutines”]]
++ [[https://mapping-high-level-constructs-to-llvm-ir.readthedocs.io/en/latest/advanced-constructs/generators.html][Generators — Mapping High Level Constructs to LLVM IR documentation]]
 
 Below (adapted from [[https://blog.rust-lang.org/2016/04/19/MIR.html][here]]) is roughly how rust compiler compiles the rust source code into machine code.
 
