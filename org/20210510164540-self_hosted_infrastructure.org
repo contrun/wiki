@@ -45,7 +45,7 @@ The biggest problem of port forwarding is that it is not scalable and there is n
 Port forwarding has the following weaknesses.
 + star topology, single point of failure
 + no inter-node connectivity
-+ number of ports are limited, you only have one 443
++ number of ports are limited, you only have one 443 (may use unix socket instead, but not all proxies support forwarding to unix socket)
 + hard to set up (authorization)
 + no [[https://en.wikipedia.org/wiki/Hairpinning][hairpinning]] support
 + most port forwarding only supports TCP
